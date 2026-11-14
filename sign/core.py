@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import sys
 from collections import deque
 from pathlib import Path
@@ -364,7 +365,7 @@ def features(sample):
 
 # ---------------------------------------------------------------- model (F7/F8)
 
-MODELS = ROOT / "models"
+MODELS = Path(os.environ.get("SIGN_MODELS", ROOT / "models"))
 
 
 class CNN1D(nn.Module):
@@ -437,3 +438,62 @@ class Recognizer:
         if label == self.cfg["none"] or conf < self.cfg["threshold"] or margin < self.cfg["margin"]:
             label = "?"
         return label, conf, top
+
+
+# ---------------------------------------------------------------- non-manual markers (F8)
+
+BROW_UP_DELTA = 0.15
+BROW_DOWN_DELTA = 0.15
+BASELINE_FRAMES = 300
+DEFAULT_BROWS = (0.1, 0.05)
+SHAKE_DEG = 6.0
+SHAKE_TURNS = 2
+
+
+def brow_scores(face):
+    bs = face["bs"]
+    up = (bs.get("browInnerUp", 0) + (bs.get("browOuterUpLeft", 0) + bs.get("browOuterUpRight", 0)) / 2) / 2
+    down = (bs.get("browDownLeft", 0) + bs.get("browDownRight", 0)) / 2
+    return up, down
+
+
+class NonManual:
+    """Per-signer brow baseline (learned while resting) and per-segment question/negation detection."""
+
+    def __init__(self):
+        self.rest = deque(maxlen=BASELINE_FRAMES)
+
+    def observe_rest(self, frame):
+        if frame.get("face"):
+            self.rest.append(brow_scores(frame["face"]))
+
+    def baseline(self):
+        return tuple(np.median(np.asarray(self.rest), 0)) if len(self.rest) >= 15 else DEFAULT_BROWS
+
+    def analyse(self, frames):
+        """Returns (question: "yn" | "wh" | None, negation: bool) for a segment."""
+        faces = [f["face"] for f in frames if f.get("face")]
+        if len(faces) < 3:
+            return None, False
+        up, down = np.mean([brow_scores(f) for f in faces], 0)
+        b_up, b_down = self.baseline()
+        d_up, d_down = up - b_up, down - b_down
+        question = "yn" if d_up > BROW_UP_DELTA and d_up >= d_down else "wh" if d_down > BROW_DOWN_DELTA else None
+        return question, head_shake([f["rot"][0] for f in faces])
+
+
+def head_shake(yaw):
+    """Counts direction reversals of at least SHAKE_DEG (hysteresis) in a yaw series."""
+    turns, direction, extreme = 0, 0, yaw[0]
+    for y in yaw[1:]:
+        if direction >= 0 and y > extreme:
+            extreme = y if direction > 0 else extreme
+        if direction <= 0 and y < extreme:
+            extreme = y if direction < 0 else extreme
+        if direction == 0 and abs(y - extreme) >= SHAKE_DEG:
+            direction, extreme = (1 if y > extreme else -1), y
+        elif direction > 0 and extreme - y >= SHAKE_DEG:
+            direction, extreme, turns = -1, y, turns + 1
+        elif direction < 0 and y - extreme >= SHAKE_DEG:
+            direction, extreme, turns = 1, y, turns + 1
+    return turns >= SHAKE_TURNS

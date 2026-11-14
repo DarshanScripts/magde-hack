@@ -11,13 +11,16 @@ DGS (German Sign Language) → German voice over a browser-to-browser LiveKit ca
 - Only cross-lane touchpoints: `web/lib/contract.ts`, `web/lib/labels.json` (fixed; change only on `main` and tell the other lane) and F9 importing `SignCamera`.
 
 ## Status
-- [x] F0 setup, pushed to `main` (commit 3286ac3). `AGENTS.md` committed on local `main` (not pushed).
-- [~] F5 sign camera: code done on `feat/sign-camera` (local). Waiting for checkpoint 1.
-- [~] F6 sign service + `/record` page: code done on `feat/sign-service` (branched from `feat/sign-camera`, local). Low-latency segmenter v2 passes simulated tests (jitter still/lowered → 0, 2 signs with 0.4 s pause → 2, 5 signs from lap → 5, 1-frame dropouts, hand leaving, 3 s cap, twitch). Waiting for checkpoint 2 with a real `SIGN_DUMP`.
-- [ ] F7 data + training (`feat/sign-training`, branch from `feat/sign-service`)
-- [ ] F8 live recognition (`feat/sign-live`)
+- [x] F0 setup, pushed to `main` (3286ac3). Local `main` (not pushed) also has `AGENTS.md` and the contract change (Token `question`/`negation`, `/api/sentence` flags, F4 rule 8, F9 step 2). **Person 1 / Lane A must be told before this reaches `main` on GitHub.**
+- [x] F5 camera (`feat/sign-camera`): hands every frame, pose/face alternate every 3rd frame, 640×480, ~24 fps on the GTX 1050 Chrome.
+- [x] F6 service + `/record` (`feat/sign-service`): low-latency segmenter v2, record mode, undo, `SIGN_DUMP` stream logging.
+- [x] F7 training (`feat/sign-training`): `core.features` (159-dim: 2×[63 handshape, 4 location vs shoulders/nose, 2 velocity, 1 present] + 18 mouth/jaw blendshapes + face flag), augmentation, 1D-CNN vs 1-NN, rejection threshold/margin, final retrain. `train.py` defaults to 120 epochs.
+- [x] F8 live (`feat/sign-live`): server loads `sign/models/` (reloads on new WebSocket if retrained), emits tokens with `question` ("yn" brows up / "wh" brows down vs per-signer rest baseline) and `negation` (≥2 yaw reversals ≥6°). `/record` shows SignDict reference videos per label, model status, flags, token history.
+- Verified only on synthetic data: record via server → train (hold-out other signer 27/28) → live inference 8/8 with correct flags; inference 8.5 ms/sign on CPU.
+- [ ] Real recording session (user, at the end), retrain, tune segmenter/brow/shake thresholds on a real `SIGN_DUMP`.
+- [ ] Integration with Lane A (F9 imports `SignCamera`, uses flags), then merge to `main` after user approval.
 
-Lane B branches are stacked (camera → service → training → live) because each needs the previous one to run. `AGENTS.md` updates ride on the current feature branch.
+Lane B branches are stacked (camera → service → training → live); `feat/sign-live` contains everything. `AGENTS.md` updates ride on the current feature branch.
 
 ## User checkpoints (Lane B)
 1. After F5: user opens `http://localhost:3000/record`, reports FPS and whether the overlay aligns.
@@ -41,6 +44,9 @@ Meanwhile the user learns the 15 p0 signs (one variant each, from DW-DGS or Spre
 - Segmenter (`sign/core.py`, constants at top), replaces plan's F6 thresholds: both hands' palm centres in shoulder widths relative to the shoulder midpoint, One Euro filtered (min_cutoff 1, beta 3), assigned to signer sides by nearest pose wrist. Active hand = visible and above `REST_Y`=1.2 sw below shoulders. Start: active hand speed > 0.8 sw/s (or entering the space while moving) for 2 frames. End: no active hand for 130 ms (hands lowered/out of view), or speed < 0.5 for 250 ms, or 3 s cap. Gaps ≤ 3 frames tolerated. Simulated latency: start ~90–155 ms (pre-roll keeps onset frames), end ~145 ms after lowering hands, ~345 ms after pausing in space. Thresholds are guesses on simulated jitter; tune with a real `SIGN_DUMP`.
 - Tuning loop: run the service with `SIGN_DUMP=/tmp/sign_stream.jsonl` (appends every received frame), then `cd sign && .venv/bin/python core.py /tmp/sign_stream.jsonl` replays it and prints state changes, segments and peak speed.
 - Face (added at user request, plan had it post-MVP): `SignCamera` runs FaceLandmarker (blendshapes + transformation matrix) and sends `face: {bs: {29 blendshapes}, rot: [yaw, pitch, roll] deg}` per frame; saved in samples. Hands every frame, pose/face alternate every 3rd frame (face costs 18 ms on GPU). Overlay shows brows/eyes/lips and a "brows ↑/↓" badge (threshold 0.4, untuned). Plan: face features feed the classifier (mouthing), and F8 derives a non-manual marker (question/negation) per token; that needs an optional field on `Token` in `contract.ts` → coordinate with Lane A on `main`.
+- Training data: no usable public DGS set for our vocabulary. `fhswf/dgs-pose` (HF) is no longer public; `fhswf/sign-language-avatar-gloss-dgs` (SignDict, 4182 words) has only 1–3 clips per word, mostly CC BY-NC-SA → used only as reference videos (`web/lib/signRefs.json`, served from `assets.wishlephant.com/signdict/videos/<key>.mp4`, with credit + license shown). Training uses the user's own recordings. Optional later: pretrain on Kaggle ASL ISLR (CC-BY 4.0, 54 GB, needs Kaggle API key).
+- `HF_TOKEN` is in `.env` (user `adityaladawa09`, fine-grained read).
+- `sign/models/` is gitignored (regenerate with `train.py`). `SIGN_MODELS` / `SIGN_DATA` env vars override folders (used by tests).
 - Lane B additions beyond §6.3 (internal to `/record` ↔ service, no cross-lane impact): `POST /undo` deletes the last sample saved by this server process; WebSocket and `/undo` reject non-localhost origins; `SIGN_DATA` env var overrides `sign/data` (used for tests).
 - `/record` page: record/infer toggle, signer (default `adi`), label dropdown, big counter (target 15), beep + flash on each saved sample, undo, next label, counts list.
 

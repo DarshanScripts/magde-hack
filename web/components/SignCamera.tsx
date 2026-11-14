@@ -105,7 +105,7 @@ export default function SignCamera(props: SignCameraProps) {
       ws.onmessage = (e) => {
         const m = JSON.parse(e.data);
         const p = propsRef.current;
-        if (m.type === "token") p.onToken?.({ label: m.label, conf: m.conf, t: m.t, top: m.top });
+        if (m.type === "token") p.onToken?.({ label: m.label, conf: m.conf, t: m.t, top: m.top, question: m.question, negation: m.negation });
         else if (m.type === "status") {
           setSigning(m.state === "signing");
           p.onStatus?.({ state: m.state, fps: m.fps, online: true });

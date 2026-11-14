@@ -3,12 +3,14 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import labels from "@/lib/labels.json";
+import refs from "@/lib/signRefs.json";
 import { SIGN_WS_URL, type SignStatus, type Token } from "@/lib/contract";
 
 const SignCamera = dynamic(() => import("@/components/SignCamera"), { ssr: false });
 const SERVICE_URL = SIGN_WS_URL.replace(/^ws/, "http").replace(/\/ws$/, "");
 const ALL_LABELS = [...labels.p0, ...labels.p1, labels.none];
 const TARGET = 15;
+const REFS: Record<string, { video: string; word: string; credit: string; license: string }> = refs;
 
 function beep() {
   const ctx = new AudioContext();
@@ -27,6 +29,8 @@ export default function RecordPage() {
   const [signer, setSigner] = useState("adi");
   const [label, setLabel] = useState(labels.p0[0]);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [hasModel, setHasModel] = useState(false);
+  const [history, setHistory] = useState<Token[]>([]);
   const [status, setStatus] = useState<SignStatus>({ state: "rest", fps: 0, online: false });
   const [token, setToken] = useState<Token | null>(null);
   const [flash, setFlash] = useState(false);
@@ -34,7 +38,9 @@ export default function RecordPage() {
   const refreshCounts = useCallback(async () => {
     try {
       const res = await fetch(`${SERVICE_URL}/health`);
-      setCounts((await res.json()).counts);
+      const h = await res.json();
+      setCounts(h.counts);
+      setHasModel(h.model);
     } catch {}
   }, []);
 
@@ -72,7 +78,10 @@ export default function RecordPage() {
         mode={mode}
         recordLabel={label}
         signer={signer}
-        onToken={setToken}
+        onToken={(t) => {
+          setToken(t);
+          setHistory((h) => [...h.slice(-11), t]);
+        }}
         onStatus={setStatus}
         onRecorded={onRecorded}
       />
@@ -91,7 +100,8 @@ export default function RecordPage() {
         </div>
 
         <p className="text-sm text-zinc-600">
-          service: {status.online ? `online · ${status.fps} fps · ${status.state}` : "offline"}
+          service: {status.online ? `online · ${status.fps} fps · ${status.state}` : "offline"} · model:{" "}
+          {hasModel ? "loaded" : "not trained yet"}
         </p>
 
         {mode === "record" ? (
@@ -121,6 +131,14 @@ export default function RecordPage() {
               <div className="text-7xl font-bold tabular-nums">{current}</div>
               <div className="text-sm text-zinc-600">target {TARGET}</div>
             </div>
+            {REFS[label] && (
+              <figure className="flex flex-col gap-1">
+                <video key={label} src={REFS[label].video} autoPlay loop muted playsInline className="w-full rounded-lg bg-black" />
+                <figcaption className="text-xs text-zinc-500">
+                  Reference: „{REFS[label].word}“ · {REFS[label].credit} via SignDict.org · {REFS[label].license}
+                </figcaption>
+              </figure>
+            )}
             <div className="flex gap-2">
               <button onClick={undo} className={`${btn} flex-1 bg-amber-200`}>
                 undo last
@@ -133,13 +151,26 @@ export default function RecordPage() {
         ) : (
           <div className="rounded-xl bg-zinc-100 p-4">
             <div className="text-sm text-zinc-600">last prediction</div>
-            <div className="text-5xl font-bold">{token?.label ?? "–"}</div>
+            <div className="flex items-center gap-2 text-5xl font-bold">
+              {token?.label ?? "–"}
+              {token?.question && <span className="rounded bg-fuchsia-600 px-2 text-xl text-white">{token.question === "yn" ? "? ja/nein" : "? W-Frage"}</span>}
+              {token?.negation && <span className="rounded bg-red-600 px-2 text-xl text-white">¬ nicht</span>}
+            </div>
             {token?.top?.map(([l, p]) => (
               <div key={l} className="flex justify-between font-mono text-sm">
                 <span>{l}</span>
                 <span>{p.toFixed(2)}</span>
               </div>
             ))}
+            <div className="mt-3 flex flex-wrap gap-1">
+              {history.map((t, i) => (
+                <span key={i} className={`rounded px-2 py-0.5 text-sm ${t.label === "?" ? "bg-zinc-300" : "bg-blue-600 text-white"}`}>
+                  {t.label}
+                  {t.question ? "?" : ""}
+                  {t.negation ? "¬" : ""}
+                </span>
+              ))}
+            </div>
           </div>
         )}
 

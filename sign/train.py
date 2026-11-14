@@ -22,7 +22,7 @@ from torch import nn
 from core import CNN1D, FEAT_DIM, MODELS, ROOT, SEQ_LEN, augment, encode, knn_probs, load_labels, prepare
 
 DATA = Path(os.environ.get("SIGN_DATA", ROOT / "data"))
-OUT = Path(os.environ.get("SIGN_MODELS", MODELS))
+OUT = MODELS
 MIN_SAMPLES = 3
 HOLDOUT_LAST = 3
 AUG_PER_SAMPLE = 30
