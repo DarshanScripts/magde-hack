@@ -164,11 +164,13 @@ back to "rest" once. If one sign flips it twice, or not at all, tell the agent.<
 <h2>Recording session 2 (now): fast takes + new words</h2>
 <p>On <code>/record</code>: <b>record</b> mode, signer <b>adi</b>. Auto-advance runs through everything in this order:</p>
 <table border="1" cellpadding="4" style="border-collapse:collapse">
-<tr><th>Group</th><th>Target</th><th>What</th></tr>
-<tr><td>15 core signs</td><td>35 (15 old + 20 new)</td><td>New takes <b>fast</b>: about 65% of your normal length</td></tr>
-<tr><td>18 new words (below)</td><td>25</td><td>Mix normal and fast</td></tr>
-<tr><td>_NONE</td><td>40 (34 done)</td><td>Everyday non-sign movements</td></tr>
+<tr><th>Label</th><th>Lowered</th><th>Continuous</th><th>Fast (lowered + continuous)</th><th>Total</th></tr>
+<tr><td>13 core signs</td><td>15 (done)</td><td>15</td><td>5 + 5</td><td>40</td></tr>
+<tr><td>WIEDERHOLEN, NACHMITTAG</td><td>15</td><td>15</td><td>5 + 5</td><td>40</td></tr>
+<tr><td>18 new words</td><td>8</td><td>8</td><td>2 + 2</td><td>20</td></tr>
+<tr><td>_NONE</td><td>34 (done)</td><td>6 (idle drift / fidgeting in the air)</td><td>–</td><td>40</td></tr>
 </table>
+<p>The page switches phases by itself (triple low beep) and shows LOWERED / CONTINUOUS / FAST above the label.</p>
 <ul>
 <li>Loop: hands down → sign once → hands down briefly → next. One beep = one saved sample.</li>
 <li>The counter box shows <b>"last take X s · normal ≈ Y s, fast ≈ Z s"</b>. Aim for the fast number.</li>

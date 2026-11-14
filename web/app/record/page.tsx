@@ -8,8 +8,6 @@ import { SIGN_WS_URL, type SignStatus, type Token } from "@/lib/contract";
 
 const SignCamera = dynamic(() => import("@/components/SignCamera"), { ssr: false });
 const SERVICE_URL = SIGN_WS_URL.replace(/^ws/, "http").replace(/\/ws$/, "");
-const TARGET = 25;
-const NONE_TARGET = 40;
 const EXTRA = ["KOPF", "BAUCH", "FIEBER", "VORMITTAG", "ABEND", "OKAY", "NICHT", "MOECHTEN",
   "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS", "SIEBEN", "ACHT", "NEUN", "ZEHN"];
 const RECORD_ORDER = [...labels.p0, ...EXTRA, labels.none];
@@ -37,10 +35,24 @@ function flags(tokens: Token[]) {
   const question = [...tokens].reverse().find((t) => t.question)?.question ?? null;
   return { question, negation: tokens.some((t) => t.negation) };
 }
-const P0_TARGET = 35; // 15 normal + 20 fast takes
-// hands-down takes first, then the page switches to continuous (mid-air pauses) for the rest of the target
-const downTarget = (l: string) => (l === labels.none ? Infinity : labels.p0.includes(l) ? 25 : 10);
-const targetOf = (l: string) => (l === labels.none ? NONE_TARGET : labels.p0.includes(l) ? P0_TARGET : TARGET);
+// Recording phases per label, in order: [takes, continuous (hands stay up), fast]
+type Phase = [number, boolean, boolean];
+const PHASES = (l: string): Phase[] =>
+  l === labels.none
+    ? [[34, false, false], [6, true, false]]
+    : labels.p0.includes(l)
+      ? [[15, false, false], [15, true, false], [5, false, true], [5, true, true]]
+      : [[8, false, false], [8, true, false], [2, false, true], [2, true, true]];
+const targetOf = (l: string) => PHASES(l).reduce((n, [k]) => n + k, 0);
+// phase for the next take; `start` = count at which it begins
+function phaseAt(l: string, count: number) {
+  let start = 0;
+  for (const [k, chain, fast] of PHASES(l)) {
+    if (count < start + k) return { start, chain, fast };
+    start += k;
+  }
+  return { start, chain: false, fast: false };
+}
 const REFS: Record<string, { video: string; word: string; credit: string; license: string }> = refs;
 
 function beep(times = 1, freq = 880) {
@@ -112,7 +124,7 @@ export default function RecordPage() {
     setFlash(true);
     setTimeout(() => setFlash(false), 300);
     const todo = RECORD_ORDER.find((l) => (next[l] ?? 0) < targetOf(l));
-    if (lab === labelRef.current && count === downTarget(lab)) return beep(3, 660); // now continuous
+    if (lab === labelRef.current && count < targetOf(lab) && phaseAt(lab, count).start === count) return beep(3, 660); // new phase
     if (lab !== labelRef.current || count < targetOf(lab) || !todo) return beep();
     // target reached: pause saving, switch to the next unfinished label, then resume
     beep(2, 1320);
@@ -176,7 +188,8 @@ export default function RecordPage() {
 
   const nextLabel = () => setLabel(RECORD_ORDER[(RECORD_ORDER.indexOf(label) + 1) % RECORD_ORDER.length]);
   const current = counts[label] ?? 0;
-  const chain = chainOverride?.label === label ? chainOverride.on : current >= downTarget(label);
+  const phase = phaseAt(label, current);
+  const chain = chainOverride?.label === label ? chainOverride.on : phase.chain;
   const btn = "rounded-lg px-3 py-2 font-medium";
 
   return (
@@ -215,11 +228,12 @@ export default function RecordPage() {
               signer
               <input value={signer} onChange={(e) => setSigner(e.target.value)} className="rounded border bg-white px-2 py-1 text-zinc-900" />
             </label>
-            <label className={`flex items-center gap-2 rounded p-2 text-sm text-zinc-900 ${chain ? "bg-violet-300 font-semibold" : "bg-zinc-100"}`}>
+            <label className={`flex items-center gap-2 rounded p-2 text-sm text-zinc-900 ${chain ? "bg-violet-300 font-semibold" : "bg-zinc-200 font-semibold"}`}>
               <input type="checkbox" checked={chain} onChange={(e) => setChainOverride({ label, on: e.target.checked })} />
+              {phase.fast && <b className="text-red-700">FAST · </b>}
               {chain
                 ? "CONTINUOUS: hands stay up, ½ s stop in the air = one sample (stop before lowering)"
-                : `hands down between takes (continuous starts automatically at ${downTarget(label)})`}
+                : "LOWERED: hands down between takes"}
             </label>
             <label className="flex flex-col gap-1 text-sm">
               label
