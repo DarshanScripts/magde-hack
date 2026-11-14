@@ -1,31 +1,11 @@
-import { useId } from "react";
-
-// Beyond Words: a speech bubble that opens up, its voice wave carrying on past the edge.
-export function Logo({ size = 40 }: { size?: number }) {
-  const id = useId();
+// Beyond Words: four speech shapes meeting in the middle.
+export function Logo({ size = 28 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
-      <defs>
-        <linearGradient id={id} x1="6" y1="8" x2="44" y2="40" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#3d5afe" />
-          <stop offset="1" stopColor="#1f9d63" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M33 12.6A15 15 0 0 0 9 24.5c0 2.9.8 5.6 2.3 7.9L9.5 39l6.7-1.9A15 15 0 0 0 36.9 30"
-        fill="none"
-        stroke={`url(#${id})`}
-        strokeWidth="3.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <g fill={`url(#${id})`}>
-        <rect x="16" y="20.5" width="3.6" height="8" rx="1.8" />
-        <rect x="22" y="16.5" width="3.6" height="16" rx="1.8" />
-        <rect x="28" y="19" width="3.6" height="11" rx="1.8" />
-        <rect x="34" y="16" width="3.6" height="17" rx="1.8" opacity=".75" />
-        <rect x="40" y="20" width="3.6" height="9" rx="1.8" opacity=".45" />
-      </g>
+    <svg width={size} height={size} viewBox="9.5 9.5 29 29" aria-hidden="true" className="shrink-0 fill-ink">
+      <path d="M16.25 9.5A6.75 6.75 0 0 1 23 16.25V23H16.25A6.75 6.75 0 0 1 16.25 9.5Z" />
+      <path d="M31.75 9.5A6.75 6.75 0 0 1 31.75 23H25V16.25A6.75 6.75 0 0 1 31.75 9.5Z" opacity=".55" />
+      <path d="M25 25H31.75A6.75 6.75 0 1 1 25 31.75V25Z" />
+      <path d="M16.25 25H23V31.75A6.75 6.75 0 1 1 16.25 25Z" opacity=".55" />
     </svg>
   );
 }

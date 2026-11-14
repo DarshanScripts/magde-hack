@@ -6,8 +6,8 @@ const HISTORY_TURNS = 6;
 const MAX_TOKENS = 12;
 const VOCABULARY = new Set<string>([...labels.p0, ...labels.p1]);
 
-const SYSTEM_PROMPT = `You turn DGS (German Sign Language) gloss tokens from a deaf caller into ONE spoken German sentence
-for a phone call with a medical practice. Answer in German.
+const SYSTEM_PROMPT = `You turn DGS (German Sign Language) gloss tokens from a caller who cannot speak into ONE spoken German sentence
+for a phone call, for example with a medical practice, a restaurant or a taxi service. Answer in German.
 Rules:
 1. Tokens are DGS glosses: topic/time first, verb last, no articles.
 2. Output one short, natural, polite sentence (Sie-Form), as the caller would say it.
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
   }
 
   const input = [
-    `History (oldest first; "them" is the practice, "me" is the caller):`,
+    `History (oldest first; "them" is the person called, "me" is the caller):`,
     ...(history.length ? history.map((t) => `${t.who}: ${t.text}`) : ["(none)"]),
     `profile.name: ${name || "(unknown)"}`,
     `question: ${question ?? "none"}`,

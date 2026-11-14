@@ -209,7 +209,7 @@ export default function SignerPage() {
         onRemoteAudio: setTheirTrack,
         onPeer: (state) => {
           if (state === "joined") setPhase("connected");
-          else hangUp(t("practiceHungUp"));
+          else hangUp(t("calleeHungUp"));
         },
         onEnd: (reason) => {
           if (session.current) reset(t(reason === "duplicate" ? "duplicateSigner" : "connectionLost"));
@@ -236,7 +236,7 @@ export default function SignerPage() {
     await speakCaption(id, text);
   }
 
-  // The practice's speech becomes "them" captions: one bubble grows with the partials, then turns final.
+  // The other side's speech becomes "them" captions: one bubble grows with the partials, then turns final.
   useEffect(() => {
     if (!theirTrack) return;
     let stop: (() => void) | undefined;
@@ -279,7 +279,7 @@ export default function SignerPage() {
   const connected = phase === "connected";
   // ?mock=1 keeps the sign buttons as a fallback; otherwise the camera runs for the length of the call.
   const camera = !mock && phase !== "idle";
-  const practice = MOCK_CONTACTS[contact].name;
+  const contactName = MOCK_CONTACTS[contact].name;
 
   return (
     <div className="flex h-dvh min-h-[640px] flex-col gap-4 p-4 sm:p-5">
@@ -292,7 +292,7 @@ export default function SignerPage() {
             rel="noreferrer"
             className="text-sm text-muted underline decoration-line underline-offset-4 transition-colors duration-200 hover:text-ink"
           >
-            {t("practicePage")}
+            {t("calleePage")}
           </a>
           <input
             value={profileName}
@@ -452,7 +452,7 @@ export default function SignerPage() {
                   </span>
                 ) : null}
                 <span className="flex items-center gap-2">
-                  <span>{t("practice")}</span> <LevelBars track={theirTrack} className="text-call" />
+                  <span>{t("them")}</span> <LevelBars track={theirTrack} className="text-call" />
                 </span>
                 <span className="flex items-center gap-2">
                   <span>{t("yourVoice")}</span> <LevelBars track={myTrack} className="text-accent" />
@@ -466,7 +466,7 @@ export default function SignerPage() {
             awaitingId={preview?.id}
             empty={
               <p className="max-w-xs text-base text-muted">
-                {connected ? t("emptyConnected") : phase === "idle" ? t("emptyIdle") : t("emptyCalling", { name: practice })}
+                {connected ? t("emptyConnected") : phase === "idle" ? t("emptyIdle") : t("emptyCalling", { name: contactName })}
               </p>
             }
           />

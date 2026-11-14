@@ -4,6 +4,9 @@ export const TTS_TRACK_NAME = "tts";
 export const MOCK_CONTACTS = [            // fictional, display only — both join ROOM_NAME
   { name: "Hausarztpraxis Dr. Weber", number: "+49 391 0000 001" },
   { name: "Praxis Dr. Schmidt",       number: "+49 391 0000 002" },
+  { name: "Pizzeria Bella Napoli",    number: "+49 391 0000 003" },
+  { name: "Taxi-Zentrale Magdeburg",  number: "+49 391 0000 004" },
+  { name: "Friseursalon Haarwerk",    number: "+49 391 0000 005" },
 ];
 export const SIGN_WS_URL = process.env.NEXT_PUBLIC_SIGN_WS_URL ?? "ws://localhost:8765/ws";
 

@@ -87,12 +87,12 @@ function ContactPicker({ contact, onContact }: { contact: number; onContact(inde
 
       {open && (
         <div className="absolute bottom-[calc(100%+14px)] left-0 z-20 w-[min(420px,calc(100vw-2rem))] origin-bottom-left rounded-[24px] border border-line bg-surface p-2 shadow-float transition duration-150 ease-out starting:translate-y-1 starting:opacity-0">
-          <p className="px-3 pt-1.5 pb-2 text-xs text-muted">{t("choosePractice")}</p>
+          <p className="px-3 pt-1.5 pb-2 text-xs text-muted">{t("chooseContact")}</p>
           <ul
             ref={list}
             role="listbox"
             tabIndex={-1}
-            aria-label={t("choosePractice")}
+            aria-label={t("chooseContact")}
             aria-activedescendant={`contact-${active}`}
             onKeyDown={onKeyDown}
             className="flex flex-col gap-1 outline-none"
