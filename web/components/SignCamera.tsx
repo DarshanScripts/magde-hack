@@ -103,7 +103,7 @@ export default function SignCamera(props: SignCameraProps) {
     };
 
     const start = async () => {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, frameRate: 30 }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: 30 }, audio: false });
       if (cancelled) return dispose();
       video.srcObject = stream;
       await video.play();
@@ -134,7 +134,6 @@ export default function SignCamera(props: SignCameraProps) {
       let lastTs = 0;
       let lastT = 0;
       let frames = 0;
-      let seconds = 0;
       let fpsStart = performance.now();
 
       const onFrame = () => {
@@ -183,13 +182,9 @@ export default function SignCamera(props: SignCameraProps) {
 
         frames++;
         if (now - fpsStart >= 1000) {
-          const f = (frames * 1000) / (now - fpsStart);
-          setFps(Math.round(f));
+          setFps(Math.round((frames * 1000) / (now - fpsStart)));
           frames = 0;
           fpsStart = now;
-          if (++seconds === 3 && f < 20 && w > 640) {
-            stream?.getVideoTracks()[0]?.applyConstraints({ width: 640, height: 480, frameRate: 30 });
-          }
         }
         rvfc = video.requestVideoFrameCallback(onFrame);
       };
@@ -208,7 +203,7 @@ export default function SignCamera(props: SignCameraProps) {
 
   const badge = !online ? "bg-zinc-600" : signing ? "bg-red-600" : "bg-black/60";
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl bg-black">
       <video ref={videoRef} className="absolute inset-0 h-full w-full -scale-x-100 object-contain" muted playsInline />
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full -scale-x-100 object-contain" />
       <div className="absolute left-2 top-2 flex gap-2 font-mono text-xs text-white">
