@@ -124,5 +124,23 @@
   "word": "Fieber",
   "credit": "134.130.170.99 - dgs.wikisign.org",
   "license": "CC BY-SA/3.0/DE"
+ },
+ "OKAY": {
+  "video": "https://assets.wishlephant.com/signdict/videos/B8p0jUPp-cqrEIsCv.mp4",
+  "word": "okay",
+  "credit": "Henrike Maria Bartsch - Gebärden lernen",
+  "license": "CC BY-NC-SA/3.0/DE"
+ },
+ "NICHT": {
+  "video": "https://assets.wishlephant.com/signdict/videos/OFNQfebI-cqrEIsCv.mp4",
+  "word": "nicht",
+  "credit": "Henrike Maria Bartsch - Gebärden lernen",
+  "license": "CC BY-NC-SA/3.0/DE"
+ },
+ "MOECHTEN": {
+  "video": "https://assets.wishlephant.com/signdict/videos/C1wdT2lp-cqrEIsCv.mp4",
+  "word": "mögen (für möchten)",
+  "credit": "Henrike Maria Bartsch - Gebärden lernen",
+  "license": "CC BY-NC-SA/3.0/DE"
  }
 }

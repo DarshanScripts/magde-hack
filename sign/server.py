@@ -16,6 +16,7 @@ P0, P1, NONE = load_labels()
 LABELS = [*P0, *P1, NONE]
 LOCAL_ORIGIN = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 REPEAT_MS = 400
+SPLIT_CONF = float(os.environ.get("SIGN_SPLIT_CONF", 0.8))  # confidence needed to cut a sign while hands stay up
 # Integration testing without a trained model: each detected sign emits the next gloss of this list.
 FAKE = [g for g in os.environ.get("SIGN_FAKE", "").split(",") if g]
 model: Recognizer | None = None
@@ -108,6 +109,20 @@ async def ws_endpoint(ws: WebSocket):
     last_state, last_status = None, 0.0
     dump = open(DUMP, "a") if DUMP else None
 
+    split = False
+
+    async def emit(frames, lab, conf, top, last):
+        question, negation = nm.analyse(frames)
+        t_end = frames[-1]["t"]
+        if lab != last[0] or t_end - last[1] > REPEAT_MS:
+            tok = {"type": "token", "label": lab, "conf": conf, "t": t_end, "top": top}
+            if question:
+                tok["question"] = question
+            if negation:
+                tok["negation"] = True
+            await ws.send_json(tok)
+        return lab, t_end
+
     async def error(message: str):
         await ws.send_json({"type": "error", "message": message})
 
@@ -140,18 +155,16 @@ async def ws_endpoint(ws: WebSocket):
                         lab, conf, top = FAKE[fake_i % len(FAKE)], 1.0, []
                         fake_i += 1
                     else:
-                        w_h = {"w": done[0]["w"], "h": done[0]["h"]}
-                        lab, conf, top = rec.predict({**w_h, "frames": done})
-                    question, negation = nm.analyse(done)
-                    t_end = done[-1]["t"]
-                    if lab != last_token[0] or t_end - last_token[1] > REPEAT_MS:
-                        tok = {"type": "token", "label": lab, "conf": conf, "t": t_end, "top": top}
-                        if question:
-                            tok["question"] = question
-                        if negation:
-                            tok["negation"] = True
-                        await ws.send_json(tok)
-                    last_token = (lab, t_end)
+                        lab, conf, top = rec.predict({"w": done[0]["w"], "h": done[0]["h"], "frames": done})
+                    if not (split and lab == "?"):
+                        last_token = await emit(done, lab, conf, top, last_token)
+                    split = False
+                elif mode == "infer" and rec is not None and seg.pause_candidate():
+                    part = seg.seg
+                    lab, conf, top = rec.predict({"w": part[0]["w"], "h": part[0]["h"], "frames": part})
+                    if lab != "?" and conf >= SPLIT_CONF:
+                        last_token = await emit(seg.cut(), lab, conf, top, last_token)
+                        split = True
                 if seg.state != last_state or now - last_status >= 1:
                     last_state, last_status = seg.state, now
                     span = times[-1] - times[0]

@@ -4,6 +4,7 @@
          "UNTERSUCHUNG", "SCHMERZ"],
   "p1": ["VORMITTAG", "ABEND", "ZEIT", "ABSAGEN", "KOPF", "BAUCH", "FIEBER",
          "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS",
-         "SIEBEN", "ACHT", "NEUN", "ZEHN", "ELF", "ZWOELF"],
+         "SIEBEN", "ACHT", "NEUN", "ZEHN", "ELF", "ZWOELF",
+         "OKAY", "NICHT", "MOECHTEN"],
   "none": "_NONE"
 }

@@ -10,7 +10,18 @@ const SignCamera = dynamic(() => import("@/components/SignCamera"), { ssr: false
 const SERVICE_URL = SIGN_WS_URL.replace(/^ws/, "http").replace(/\/ws$/, "");
 const TARGET = 15;
 const NONE_TARGET = 30;
-const RECORD_ORDER = [...labels.p0, labels.none]; // p1 (numbers, extras) not recorded for now
+const EXTRA = ["KOPF", "BAUCH", "FIEBER", "VORMITTAG", "ABEND", "ZEIT", "OKAY", "NICHT", "MOECHTEN",
+  "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS", "SIEBEN"];
+const RECORD_ORDER = [...labels.p0, ...EXTRA, labels.none];
+const HINTS: Record<string, string> = {
+  EINS: "Thumb up (fist, thumb out), palm towards you. Not a thumbs-up gesture: hold at chest, short downward tap.",
+  ZWEI: "Thumb + index finger out, palm towards you.",
+  DREI: "Thumb + index + middle finger out.",
+  VIER: "Four fingers out, thumb folded in.",
+  FUENF: "Open hand, all five fingers spread.",
+  SECHS: "Open dominant hand (5) + thumb of the other hand.",
+  SIEBEN: "Open dominant hand (5) + thumb and index of the other hand.",
+};
 const PAUSE_MS = 2500;
 const SENTENCE_GAP_MS = 4000;
 
@@ -18,7 +29,8 @@ function flags(tokens: Token[]) {
   const question = [...tokens].reverse().find((t) => t.question)?.question ?? null;
   return { question, negation: tokens.some((t) => t.negation) };
 }
-const targetOf = (l: string) => (l === labels.none ? NONE_TARGET : TARGET);
+const P0_TARGET = 25; // 15 normal + 10 fast takes
+const targetOf = (l: string) => (l === labels.none ? NONE_TARGET : labels.p0.includes(l) ? P0_TARGET : TARGET);
 const REFS: Record<string, { video: string; word: string; credit: string; license: string }> = refs;
 
 function beep(times = 1, freq = 880) {
@@ -184,7 +196,7 @@ export default function RecordPage() {
             <label className="flex flex-col gap-1 text-sm">
               label
               <select value={label} onChange={(e) => setLabel(e.target.value)} className="rounded border bg-white px-2 py-1 text-lg text-zinc-900">
-                {Object.entries({ p0: labels.p0, none: [labels.none] }).map(([group, list]) => (
+                {Object.entries({ p0: labels.p0, extra: EXTRA, none: [labels.none] }).map(([group, list]) => (
                   <optgroup key={group} label={group}>
                     {list.map((l) => (
                       <option key={l} value={l}>
@@ -203,6 +215,7 @@ export default function RecordPage() {
               <div className="text-7xl font-bold tabular-nums">{current}</div>
               <div className="text-sm text-zinc-600">target {targetOf(label)}</div>
             </div>
+            {HINTS[label] && <p className="rounded-lg bg-amber-100 p-3 text-lg text-zinc-900">{HINTS[label]}</p>}
             {REFS[label] && (
               <figure className="flex flex-col gap-1">
                 <video key={label} src={REFS[label].video} autoPlay loop muted playsInline className="w-full rounded-lg bg-black" />
