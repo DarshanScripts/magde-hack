@@ -21,7 +21,8 @@ const SignCamera = dynamic(() => import("@/components/SignCamera"), {
 
 const UNCERTAIN = "?";
 const SIGN_OFFLINE: SignStatus = { state: "rest", fps: 0, online: false };
-const SENTENCE_DELAY_MS = 1500;
+// Signers lower their hands between signs: Lane B measured 2.5 s between signs (median), up to ~4.6 s.
+const SENTENCE_DELAY_MS = 4000;
 const HISTORY_TURNS = 6;
 const PILL = "h-8 shrink-0 cursor-pointer rounded-full px-4 text-sm font-medium transition duration-200 ease-out-soft active:scale-[0.97]";
 const MOCK_LABELS = [...labels.p0, ...labels.p1, UNCERTAIN];
@@ -103,7 +104,8 @@ export default function SignerPage() {
     updateChips([]);
     setMockFlags({});
     discardPreview();
-    if (!gloss.length || !session.current?.voice) return;
+    const owner = session.current;
+    if (!gloss.length || !owner?.voice) return;
     const id = `me-${nextId.current++}`;
     setCaptions((list) => [...list, { id, who: "me", text: "…", final: false, gloss }]);
     try {
@@ -120,6 +122,11 @@ export default function SignerPage() {
       });
       if (!res.ok) throw new Error("sentence request failed");
       const { text } = (await res.json()) as { text: string };
+      // Hung up while the sentence was being generated: nothing to say any more.
+      if (session.current !== owner) {
+        setCaptions((list) => list.filter((c) => c.id !== id));
+        return;
+      }
       setCaptions((list) => list.map((c) => (c.id === id ? { ...c, text } : c)));
       if (confirmRef.current) showPreview({ id, text });
       else await speakCaption(id, text);

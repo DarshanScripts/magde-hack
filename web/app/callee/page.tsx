@@ -5,10 +5,13 @@ import CallTimer from "@/components/CallTimer";
 import LangToggle from "@/components/LangToggle";
 import LevelBars from "@/components/LevelBars";
 import LatticeLoader from "@/components/reactbits/LatticeLoader";
-import { HandIcon, HangUpIcon, MicIcon, MicOffIcon, PhoneIcon } from "@/components/icons";
+import { HandIcon, HangUpIcon, MicIcon, MicOffIcon, PhoneIcon, SpeakerIcon } from "@/components/icons";
 import { joinCall, describeCallError } from "@/lib/call";
 import { IDENTITY } from "@/lib/contract";
 import { useI18n } from "@/lib/i18n";
+
+const ROUND =
+  "flex h-16 flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-3xl text-sm font-medium transition duration-200 ease-out-soft active:scale-[0.97]";
 
 type Phase = "idle" | "connecting" | "waiting" | "connected";
 type Call = Awaited<ReturnType<typeof joinCall>>;
@@ -16,6 +19,7 @@ type Call = Awaited<ReturnType<typeof joinCall>>;
 export default function CalleePage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [muted, setMuted] = useState(false);
+  const [speaker, setSpeaker] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [voiceTrack, setVoiceTrack] = useState<MediaStreamTrack | null>(null);
   const call = useRef<Call | null>(null);
@@ -25,6 +29,7 @@ export default function CalleePage() {
     call.current = null;
     setPhase("idle");
     setMuted(false);
+    setSpeaker(false);
     setVoiceTrack(null);
     setNotice(message);
   }
@@ -62,6 +67,12 @@ export default function CalleePage() {
     const next = !muted;
     setMuted(next);
     await call.current?.room.localParticipant.setMicrophoneEnabled(!next);
+  }
+
+  function toggleSpeaker() {
+    const next = !speaker;
+    setSpeaker(next);
+    call.current?.setSpeaker(next);
   }
 
   useEffect(() => () => void call.current?.leave(), []);
@@ -126,25 +137,28 @@ export default function CalleePage() {
         ) : null}
       </main>
 
-      <footer className="flex w-full items-center justify-center gap-4">
+      <footer className="flex w-full items-center justify-center gap-3">
         {live ? (
           <>
             <button
               type="button"
               onClick={toggleMute}
               aria-pressed={muted}
-              className={`flex h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-full border border-line text-base font-medium shadow-card transition duration-200 ease-out-soft active:scale-[0.97] ${
-                muted ? "bg-ink text-paper" : "bg-surface text-ink"
-              }`}
+              className={`${ROUND} border border-line shadow-card ${muted ? "bg-ink text-paper" : "bg-surface text-ink"}`}
             >
               {muted ? <MicOffIcon /> : <MicIcon />}
               <span>{t(muted ? "muted" : "micOn")}</span>
             </button>
             <button
               type="button"
-              onClick={() => leave()}
-              className="flex h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-danger text-base font-medium text-white shadow-float transition duration-200 ease-out-soft active:scale-[0.97]"
+              onClick={toggleSpeaker}
+              aria-pressed={speaker}
+              className={`${ROUND} border border-line shadow-card ${speaker ? "bg-ink text-paper" : "bg-surface text-ink"}`}
             >
+              <SpeakerIcon />
+              <span>{t("speaker")}</span>
+            </button>
+            <button type="button" onClick={() => leave()} className={`${ROUND} bg-danger text-white shadow-float`}>
               <HangUpIcon />
               <span>{t("hangUp")}</span>
             </button>

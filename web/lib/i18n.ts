@@ -45,7 +45,7 @@ const de = {
   duplicateCallee: "Ein anderes Gerät hat die Praxis-Seite geöffnet und den Anruf übernommen.",
   ttsFailed: "Die Sprachausgabe ist fehlgeschlagen.",
   sentenceFailed: "Der Satz konnte nicht gebildet werden.",
-  mockHint: "Testmodus: Tippen Sie im Anruf auf Gebärden. Nach 1,5 Sekunden Pause wird daraus ein Satz gesprochen.",
+  mockHint: "Testmodus: Tippen Sie im Anruf auf Gebärden. Nach 4 Sekunden Pause wird daraus ein Satz gesprochen.",
   chipKeys: "Enter = sagen · Backspace = letzte löschen · Esc = alle löschen",
   confirmMode: "Vor dem Sprechen bestätigen",
   confirmKeys: "Enter = sagen · Esc = verwerfen",
@@ -64,6 +64,7 @@ const de = {
     "Die anrufende Person gebärdet in Deutscher Gebärdensprache. Sie hören ihre Sätze als Computerstimme. Sprechen Sie ganz normal, Ihre Antwort wird als Text angezeigt.",
   muted: "Stumm",
   micOn: "Mikrofon an",
+  speaker: "Lautsprecher",
   join: "Beitreten",
   language: "Sprache der Oberfläche",
 };
@@ -110,7 +111,7 @@ const en: typeof de = {
   duplicateCallee: "Another device opened the practice page and took over the call.",
   ttsFailed: "Text-to-speech failed.",
   sentenceFailed: "The sentence could not be created.",
-  mockHint: "Test mode: tap signs during a call. After a 1.5 second pause they are spoken as one sentence.",
+  mockHint: "Test mode: tap signs during a call. After a 4 second pause they are spoken as one sentence.",
   chipKeys: "Enter = speak · Backspace = remove last · Esc = clear",
   confirmMode: "Confirm before speaking",
   confirmKeys: "Enter = speak · Esc = discard",
@@ -129,6 +130,7 @@ const en: typeof de = {
     "The caller signs in German Sign Language. You hear their sentences as a computer voice. Just speak normally, your answer is shown to them as text.",
   muted: "Muted",
   micOn: "Microphone on",
+  speaker: "Speaker",
   join: "Join",
   language: "Interface language",
 };

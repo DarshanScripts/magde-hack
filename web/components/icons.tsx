@@ -34,6 +34,13 @@ export const HangUpIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const SpeakerIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4H4Z" />
+    <path d="M15.5 9a4 4 0 0 1 0 6M18.2 6.3a7.8 7.8 0 0 1 0 11.4" />
+  </Icon>
+);
+
 export const MicIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <rect x="9" y="3" width="6" height="11" rx="3" />

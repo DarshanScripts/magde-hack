@@ -47,6 +47,16 @@ export function describeCallError(err: unknown, t: Translate): string {
   return t("connectFailed", { detail: err instanceof Error ? err.message : String(err) });
 }
 
+const LOUD_GAIN = 3;
+
+// Phones may route call audio to the quiet earpiece. Where the browser lists a loudspeaker output, use it.
+async function preferLoudspeaker(ac: AudioContext) {
+  if (!("setSinkId" in ac)) return;
+  const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+  const speaker = devices.find((d) => d.kind === "audiooutput" && /speaker|lautsprecher/i.test(d.label));
+  if (speaker) await (ac as AudioContext & { setSinkId(id: string): Promise<void> }).setSinkId(speaker.deviceId).catch(() => {});
+}
+
 export async function joinCall(
   identity: Identity,
   on: {
@@ -55,7 +65,7 @@ export async function joinCall(
     // "duplicate": another device joined with the same identity and LiveKit dropped this one.
     onEnd(reason: "duplicate" | "lost"): void;
   },
-): Promise<{ room: Room; leave(): Promise<void> }> {
+): Promise<{ room: Room; leave(): Promise<void>; setSpeaker(on: boolean): void }> {
   audioContext();
   const res = await fetch(`/api/livekit-token?identity=${identity}`, { cache: "no-store" });
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "token request failed");
@@ -64,6 +74,31 @@ export async function joinCall(
   const peer = identity === IDENTITY.signer ? IDENTITY.callee : IDENTITY.signer;
   const room = new Room({ adaptiveStream: true, dynacast: true });
   const players = new Set<HTMLMediaElement>();
+  const remote = new Set<MediaStreamTrack>();
+  // Speaker mode plays the other side through a boosted, limited Web Audio path instead of the plain <audio> elements.
+  let loud: { ac: AudioContext; out: AudioNode; sources: Map<MediaStreamTrack, AudioNode> } | null = null;
+  const routeLoud = (track: MediaStreamTrack) => {
+    if (!loud || loud.sources.has(track)) return;
+    const source = loud.ac.createMediaStreamSource(new MediaStream([track]));
+    source.connect(loud.out);
+    loud.sources.set(track, source);
+  };
+  const setSpeaker = (on: boolean) => {
+    if (on && !loud) {
+      const ac = new AudioContext();
+      void ac.resume();
+      const gain = new GainNode(ac, { gain: LOUD_GAIN });
+      const limiter = new DynamicsCompressorNode(ac, { threshold: -10, knee: 6, ratio: 12, attack: 0.003, release: 0.25 });
+      gain.connect(limiter).connect(ac.destination);
+      loud = { ac, out: gain, sources: new Map() };
+      remote.forEach(routeLoud);
+      void preferLoudspeaker(ac);
+    } else if (!on && loud) {
+      void loud.ac.close();
+      loud = null;
+    }
+    players.forEach((el) => (el.muted = on));
+  };
   let peerSeen = false;
   const peerHere = () => [...room.remoteParticipants.values()].some((p) => p.identity === peer);
 
@@ -73,12 +108,21 @@ export async function joinCall(
       // Attaching to an <audio> element plays it, and Chrome needs it before Web Audio can read the track.
       const el = track.attach();
       el.hidden = true;
+      el.muted = loud !== null;
       document.body.appendChild(el);
       players.add(el);
+      remote.add(track.mediaStreamTrack);
+      routeLoud(track.mediaStreamTrack);
       on.onRemoteAudio(track.mediaStreamTrack);
     })
     .on(RoomEvent.TrackUnsubscribed, (track) => {
-      track.detach().forEach((el) => el.remove());
+      track.detach().forEach((el) => {
+        el.remove();
+        players.delete(el);
+      });
+      remote.delete(track.mediaStreamTrack);
+      loud?.sources.get(track.mediaStreamTrack)?.disconnect();
+      loud?.sources.delete(track.mediaStreamTrack);
     })
     .on(RoomEvent.ParticipantConnected, (p) => {
       if (p.identity === peer) {
@@ -103,8 +147,10 @@ export async function joinCall(
       peerSeen = here;
     })
     .on(RoomEvent.Disconnected, (reason) => {
+      setSpeaker(false);
       players.forEach((el) => el.remove());
       players.clear();
+      remote.clear();
       on.onEnd(reason === DisconnectReason.DUPLICATE_IDENTITY ? "duplicate" : "lost");
     });
 
@@ -117,7 +163,7 @@ export async function joinCall(
     }
   }
 
-  return { room, leave: () => room.disconnect() };
+  return { room, leave: () => room.disconnect(), setSpeaker };
 }
 
 export async function createVoice(
