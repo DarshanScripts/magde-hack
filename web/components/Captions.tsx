@@ -33,11 +33,11 @@ export default function Captions({
             className={`flex animate-rise flex-col gap-1 ${c.who === "me" ? "items-end" : "items-start"}`}
           >
             <p
-              className={`max-w-[85%] rounded-3xl px-5 py-3 text-xl leading-snug transition-opacity duration-300 ${
+              className={`max-w-[85%] rounded-3xl px-5 py-3 text-xl leading-snug ${
                 c.who === "me"
                   ? "rounded-br-lg bg-accent text-white"
                   : "rounded-bl-lg bg-sunken text-ink"
-              } ${c.final ? "" : "opacity-60"}`}
+              }`}
             >
               {c.text}
             </p>
