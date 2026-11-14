@@ -84,11 +84,39 @@ def key_frames(video: Path, label: str) -> list[str]:
     return names
 
 
+# extended fingers (thumb, index, middle, ring, little) per hand: dominant, other
+FINGERS = {
+    "EINS": ("10000", None), "ZWEI": ("11000", None), "DREI": ("11100", None), "VIER": ("01111", None),
+    "FUENF": ("11111", None), "SECHS": ("11111", "10000"), "SIEBEN": ("11111", "11000"),
+}
+
+
+def hand_svg(ext: str, title: str) -> str:
+    """Schematic right hand, palm towards you (seen by you): thumb on the left. Green = extended."""
+    parts = ['<rect x="30" y="80" width="80" height="70" rx="16" fill="#e7d3bf" stroke="#555"/>']
+    for i, x in enumerate((38, 58, 78, 98)):
+        up = ext[i + 1] == "1"
+        h = 62 if up else 18
+        parts.append(f'<rect x="{x - 8}" y="{82 - h}" width="16" height="{h + 8}" rx="8" '
+                     f'fill="{"#22c55e" if up else "#c9b6a3"}" stroke="#555"/>')
+    up = ext[0] == "1"
+    parts.append(f'<rect x="{-2 if up else 18}" y="100" width="{40 if up else 22}" height="16" rx="8" '
+                 f'fill="{"#22c55e" if up else "#c9b6a3"}" stroke="#555" transform="rotate(-35 30 108)"/>')
+    return (f'<figure><svg viewBox="-10 0 130 160" width="150">{"".join(parts)}</svg>'
+            f'<figcaption>{title}</figcaption></figure>')
+
+
 def number_card(label: str) -> str:
+    dom, other = FINGERS[label]
+    hands = hand_svg(dom, "dominant hand")
+    if other:
+        hands = hand_svg(other, "other hand") + hands
     return f"""
 <section class="card" id="{label}">
-  <h2>{label} <span class="en">number (no reference video)</span></h2>
-  <p class="ex">{html.escape(NUMBERS[label])} Example: MORGEN DREI UHR → „Morgen um 3 Uhr.“</p>
+  <h2>{label} <span class="en">number (diagram, no reference video)</span></h2>
+  <p class="ex">{html.escape(NUMBERS[label])} Example: MORGEN {label} UHR → „Morgen um {list(FINGERS).index(label) + 1} Uhr.“</p>
+  <div class="row nums">{hands}</div>
+  <p class="credit">Schematic, palm facing you as you see your own hand; green = extended finger.</p>
 </section>"""
 
 
@@ -165,7 +193,7 @@ h1{{margin-bottom:4px}} nav a{{margin-right:10px;font-family:monospace}}
 figure{{margin:0;position:relative}} figcaption{{position:absolute;top:4px;left:6px;background:#000a;color:#fff;
 padding:0 6px;border-radius:4px;font-size:12px}}
 .ctl button{{margin:4px 4px 0 0}} .ctl .on{{background:#2563eb;color:#fff}}
-.credit{{font-size:12px;color:#777;margin:6px 0 0}} code{{background:#f3f3f3;padding:0 4px;border-radius:4px}}
+\n.nums figure{{background:#f7f7f7;border-radius:8px;padding:6px}} .nums figcaption{{position:static;background:none;color:#333}}\n.credit{{font-size:12px;color:#777;margin:6px 0 0}} code{{background:#f3f3f3;padding:0 4px;border-radius:4px}}
 </style></head><body>
 <h1>DGS practice sheet</h1>
 <p>15 core signs (p0) and 16 new words. Videos loop; use 0.5× and mirror to learn.</p>
