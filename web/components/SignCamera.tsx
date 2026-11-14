@@ -35,6 +35,13 @@ const FACE_BLENDSHAPES = new Set([
 ]);
 const MAX_BUFFERED = 64 * 1024;
 const SLOTS = 3;
+
+// TFLite logs INFO lines through console.error, which the dev overlay reports as errors.
+const consoleError = console.error.bind(console);
+console.error = (...args: unknown[]) => {
+  if (typeof args[0] === "string" && args[0].includes("TensorFlow Lite XNNPACK delegate")) return;
+  consoleError(...args);
+};
 const BROW_THRESHOLD = 0.4;
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
