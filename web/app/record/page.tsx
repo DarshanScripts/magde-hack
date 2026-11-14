@@ -209,13 +209,28 @@ export default function RecordPage() {
     }
   };
 
-  const undo = async () => {
+  const undo = useCallback(async () => {
     const res = await fetch(`${SERVICE_URL}/undo`, { method: "POST" }).catch(() => null);
     if (res?.ok) {
       const { label: lab, count } = await res.json();
       setCounts((c) => ({ ...c, [lab]: count }));
-    }
-  };
+      if (lab !== labelRef.current) setLabel(lab); // undo right after an auto-advance goes back to that label
+      beep(1, 330);
+    } else say("nothing to undo");
+  }, []);
+
+  useEffect(() => {
+    if (mode !== "record") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (e.key === "Backspace" || e.key === "u") {
+        e.preventDefault();
+        void undo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode, undo]);
 
   const nextLabel = () => setLabel(RECORD_ORDER[(RECORD_ORDER.indexOf(label) + 1) % RECORD_ORDER.length]);
   const current = counts[label] ?? 0;
@@ -247,6 +262,12 @@ export default function RecordPage() {
             </button>
           ))}
         </div>
+
+        {mode === "record" && (
+          <button onClick={undo} className={`${btn} bg-amber-400 py-4 text-2xl font-bold text-zinc-900 hover:bg-amber-300`}>
+            ↶ UNDO LAST TAKE <span className="text-base font-medium">(Backspace or U)</span>
+          </button>
+        )}
 
         <p className="text-sm text-zinc-600">
           service: {status.online ? `online · ${status.fps} fps · ${status.state}` : "offline"} · model:{" "}
