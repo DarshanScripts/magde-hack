@@ -66,6 +66,12 @@ export const HandIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const CheckIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </Icon>
+);
+
 export const ChevronIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <path d="m7 10 5 5 5-5" />
