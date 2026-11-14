@@ -5,7 +5,8 @@ import CallTimer from "@/components/CallTimer";
 import LangToggle from "@/components/LangToggle";
 import LevelBars from "@/components/LevelBars";
 import LatticeLoader from "@/components/reactbits/LatticeLoader";
-import { HandIcon, HangUpIcon, MicIcon, MicOffIcon, PhoneIcon, SpeakerIcon } from "@/components/icons";
+import { Logo } from "@/components/Logo";
+import { HangUpIcon, MicIcon, MicOffIcon, PhoneIcon, SpeakerIcon } from "@/components/icons";
 import { joinCall, describeCallError } from "@/lib/call";
 import { IDENTITY } from "@/lib/contract";
 import { useI18n } from "@/lib/i18n";
@@ -84,10 +85,8 @@ export default function CalleePage() {
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <header className="flex w-full items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-ink text-paper">
-            <HandIcon width={18} height={18} />
-          </span>
-          <span className="text-lg font-semibold tracking-tight">DGS Call</span>
+          <Logo />
+          <span className="text-lg font-semibold tracking-tight">Beyond Words</span>
         </div>
         <LangToggle />
       </header>

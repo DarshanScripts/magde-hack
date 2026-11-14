@@ -7,6 +7,7 @@ import DialBar, { type CallPhase } from "@/components/DialBar";
 import LangToggle from "@/components/LangToggle";
 import LevelBars from "@/components/LevelBars";
 import { HandIcon, SendIcon } from "@/components/icons";
+import { Logo } from "@/components/Logo";
 import { createVoice, joinCall, describeCallError, soundOutputWorks } from "@/lib/call";
 import { useI18n } from "@/lib/i18n";
 import { startCaptions, type CaptionState } from "@/lib/stt";
@@ -284,10 +285,8 @@ export default function SignerPage() {
     <div className="flex h-dvh min-h-[640px] flex-col gap-4 p-4 sm:p-5">
       <header className="flex items-center justify-between px-2">
         <div className="flex items-center gap-2.5">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-ink text-paper">
-            <HandIcon width={18} height={18} />
-          </span>
-          <span className="text-lg font-semibold tracking-tight">DGS Call</span>
+          <Logo />
+          <span className="text-lg font-semibold tracking-tight">Beyond Words</span>
         </div>
         <p className="hidden text-sm text-muted lg:block">{t("tagline")}</p>
         <div className="flex items-center gap-3">

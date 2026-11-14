@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DGS Call",
+  title: "Beyond Words",
   description: "Telefonieren in Deutscher Gebärdensprache: Gebärden werden zur Stimme.",
   other: { google: "notranslate" },
 };
