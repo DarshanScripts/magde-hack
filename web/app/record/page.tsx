@@ -39,10 +39,10 @@ function flags(tokens: Token[]) {
 type Phase = [number, boolean, boolean];
 const PHASES = (l: string): Phase[] =>
   l === labels.none
-    ? [[34, false, false], [6, true, false]]
-    : labels.p0.includes(l)
-      ? [[15, false, false], [14, true, false], [3, false, true], [3, true, true]] // 35: 18 hands down, 17 continuous
-      : [[6, false, false], [5, true, false], [2, false, true], [2, true, true]]; // 15: 8 hands down, 7 continuous
+    ? [[34, false, false]] // already recorded
+    : ["WIEDERHOLEN", "NACHMITTAG"].includes(l) || !labels.p0.includes(l)
+      ? [[8, false, false], [8, true, false], [2, false, true], [2, true, true]] // 20 from scratch
+      : [[15, false, false], [3, true, false], [2, true, true]]; // 20: 15 hands down already recorded
 const targetOf = (l: string) => PHASES(l).reduce((n, [k]) => n + k, 0);
 // phase for the next take; `start` = count at which it begins
 function say(text: string) {
