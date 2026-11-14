@@ -11,13 +11,13 @@ DGS (German Sign Language) → German voice over a browser-to-browser LiveKit ca
 - Only cross-lane touchpoints: `web/lib/contract.ts`, `web/lib/labels.json` (fixed; change only on `main` and tell the other lane) and F9 importing `SignCamera`.
 
 ## Status
-- [x] F0 setup, pushed to `main` (commit 3286ac3).
-- [ ] F5 sign camera (`feat/sign-camera`)
-- [ ] F6 sign service + `/record` page (`feat/sign-service`)
-- [ ] F7 data + training (`feat/sign-training`)
+- [x] F0 setup, pushed to `main` (commit 3286ac3). `AGENTS.md` committed on local `main` (not pushed).
+- [~] F5 sign camera: code done on `feat/sign-camera` (local). Waiting for checkpoint 1.
+- [~] F6 sign service + `/record` page: code done on `feat/sign-service` (branched from `feat/sign-camera`, local). Segmenter passes simulated tests (jitter → 0 segments, 5 signs → 5, forced cut, hand leaving). Waiting for checkpoint 2.
+- [ ] F7 data + training (`feat/sign-training`, branch from `feat/sign-service`)
 - [ ] F8 live recognition (`feat/sign-live`)
 
-Lane B order: F5 + F6 in parallel → F7 code (tested on dummy data while the user records) → F8.
+Lane B branches are stacked (camera → service → training → live) because each needs the previous one to run. `AGENTS.md` updates ride on the current feature branch.
 
 ## User checkpoints (Lane B)
 1. After F5: user opens `http://localhost:3000/record`, reports FPS and whether the overlay aligns.
@@ -37,6 +37,10 @@ Meanwhile the user learns the 15 p0 signs (one variant each, from DW-DGS or Spre
 - Next.js 16 differs from older versions: read `web/node_modules/next/dist/docs/` before writing Next code.
 - `ELEVEN_LABS_VOICE_ID` = "Susi" (`v3V1d2rk6528UrLKRuy8`, native German female, conversational shared voice). Works with `eleven_flash_v2_5` + `language_code: "de"` without adding it to the library.
 - `LIVEKIT_ROOM` not set; code default `praxis-demo`.
+- MediaPipe wasm from jsDelivr pinned to `@1.2.2` (update `WASM_URL` in `SignCamera.tsx` if the package version changes); models from `storage.googleapis.com/mediapipe-models` (hand_landmarker float16, pose_landmarker_lite float16). Needs internet at load.
+- Segmenter speed = dominant (signer's right) wrist, EMA-smoothed (α 0.5), measured over a 3-frame lag, in shoulder widths/s. `END_STILL_MS` = 300 (plan said 350) so a ~0.5 s pause separates signs. All constants at the top of `sign/core.py`.
+- Lane B additions beyond §6.3 (internal to `/record` ↔ service, no cross-lane impact): `POST /undo` deletes the last sample saved by this server process; WebSocket and `/undo` reject non-localhost origins; `SIGN_DATA` env var overrides `sign/data` (used for tests).
+- `/record` page: record/infer toggle, signer (default `adi`), label dropdown, big counter (target 15), beep + flash on each saved sample, undo, next label, counts list.
 
 ## Environment facts
 - Repo: `/home/adityaladawa/Desktop/mghack`, remote `https://github.com/DarshanScripts/magde-hack.git`.
