@@ -38,6 +38,8 @@ function flags(tokens: Token[]) {
   return { question, negation: tokens.some((t) => t.negation) };
 }
 const P0_TARGET = 35; // 15 normal + 20 fast takes
+// hands-down takes first, then the page switches to continuous (mid-air pauses) for the rest of the target
+const downTarget = (l: string) => (l === labels.none ? Infinity : labels.p0.includes(l) ? 25 : 10);
 const targetOf = (l: string) => (l === labels.none ? NONE_TARGET : labels.p0.includes(l) ? P0_TARGET : TARGET);
 const REFS: Record<string, { video: string; word: string; credit: string; license: string }> = refs;
 
@@ -64,7 +66,7 @@ export default function RecordPage() {
   const [history, setHistory] = useState<Token[]>([]);
   const [status, setStatus] = useState<SignStatus>({ state: "rest", fps: 0, online: false });
   const [takeMs, setTakeMs] = useState(0);
-  const [chain, setChain] = useState(false);
+  const [chainOverride, setChainOverride] = useState<{ label: string; on: boolean } | null>(null);
   const signStart = useRef(0);
   const onStatus = useCallback((s: SignStatus) => {
     if (s.state === "signing" && !signStart.current) signStart.current = Date.now();
@@ -110,6 +112,7 @@ export default function RecordPage() {
     setFlash(true);
     setTimeout(() => setFlash(false), 300);
     const todo = RECORD_ORDER.find((l) => (next[l] ?? 0) < targetOf(l));
+    if (lab === labelRef.current && count === downTarget(lab)) return beep(3, 660); // now continuous
     if (lab !== labelRef.current || count < targetOf(lab) || !todo) return beep();
     // target reached: pause saving, switch to the next unfinished label, then resume
     beep(2, 1320);
@@ -173,6 +176,7 @@ export default function RecordPage() {
 
   const nextLabel = () => setLabel(RECORD_ORDER[(RECORD_ORDER.indexOf(label) + 1) % RECORD_ORDER.length]);
   const current = counts[label] ?? 0;
+  const chain = chainOverride?.label === label ? chainOverride.on : current >= downTarget(label);
   const btn = "rounded-lg px-3 py-2 font-medium";
 
   return (
@@ -211,9 +215,11 @@ export default function RecordPage() {
               signer
               <input value={signer} onChange={(e) => setSigner(e.target.value)} className="rounded border bg-white px-2 py-1 text-zinc-900" />
             </label>
-            <label className="flex items-center gap-2 rounded bg-violet-100 p-2 text-sm text-zinc-900">
-              <input type="checkbox" checked={chain} onChange={(e) => setChain(e.target.checked)} />
-              continuous: hands stay up, brief stop in the air between takes = one sample each
+            <label className={`flex items-center gap-2 rounded p-2 text-sm text-zinc-900 ${chain ? "bg-violet-300 font-semibold" : "bg-zinc-100"}`}>
+              <input type="checkbox" checked={chain} onChange={(e) => setChainOverride({ label, on: e.target.checked })} />
+              {chain
+                ? "CONTINUOUS: hands stay up, ½ s stop in the air = one sample (stop before lowering)"
+                : `hands down between takes (continuous starts automatically at ${downTarget(label)})`}
             </label>
             <label className="flex flex-col gap-1 text-sm">
               label
