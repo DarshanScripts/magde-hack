@@ -3,77 +3,60 @@
 Persistent context for coding agents. `plan.md` is the spec (architecture, contracts §6, functionalities F0–F10, "Done when" checks). This file holds only the current state, decisions that differ from or add to the plan, and facts learned. Keep it short; replace outdated lines instead of appending contradictions.
 
 ## Project
-DGS (German Sign Language) → German voice over a browser-to-browser LiveKit call, for a deaf/non-speaking caller booking a doctor's appointment. MagdeHack, 24 h. MVP: ~15 fixed signs (p0), segment-then-classify, LLM (Gemma 4 31B via OpenRouter) turns glosses into one German sentence, ElevenLabs TTS into the call, ElevenLabs Scribe for captions.
+DGS (German Sign Language) → German voice over a browser-to-browser LiveKit call, for a deaf/non-speaking caller booking a doctor's appointment. MagdeHack, 24 h (13–14 Nov 2026). MVP: 15 fixed signs (p0), segment-then-classify, LLM (Gemma 4 31B via OpenRouter) turns glosses into one German sentence, ElevenLabs TTS into the call, ElevenLabs Scribe for captions.
 
 ## Roles
-- **Person 2 = this user (Aditya), Lane B: F5–F8** (camera → token). The agent writes all code; the user signs, grants camera access, tests in the browser and reports results at checkpoints.
-- Person 1 + own agent, Lane A: F1–F4, F9 (call, captions, voice, sentence, main page).
-- Only cross-lane touchpoints: `web/lib/contract.ts`, `web/lib/labels.json` (fixed; change only on `main` and tell the other lane) and F9 importing `SignCamera`.
+- **Person 2 = this user (Aditya), Lane B: F5–F8** (camera → token). The agent writes all code; the user signs, grants camera access, tests in the browser and reports results.
+- Person 1 + own agent, Lane A: F1–F4, F9 (call, captions, voice, sentence, main page). Per the user, Lane A is implemented on person 1's laptop (not on GitHub yet).
+- Cross-lane touchpoints: `web/lib/contract.ts`, `web/lib/labels.json` and F9 importing `SignCamera`.
 
 ## Status
-- [x] F0 setup, pushed to `main` (3286ac3). Local `main` (not pushed) also has `AGENTS.md` and the contract change (Token `question`/`negation`, `/api/sentence` flags, F4 rule 8, F9 step 2). **Person 1 / Lane A must be told before this reaches `main` on GitHub.**
-- [x] F5 camera (`feat/sign-camera`): hands every frame, pose/face alternate every 3rd frame, 640×480, ~24 fps on the GTX 1050 Chrome.
-- [x] F6 service + `/record` (`feat/sign-service`): low-latency segmenter v2, record mode, undo, `SIGN_DUMP` stream logging.
-- [x] F7 training (`feat/sign-training`): `core.features` (159-dim: 2×[63 handshape, 4 location vs shoulders/nose, 2 velocity, 1 present] + 18 mouth/jaw blendshapes + face flag), augmentation, 1D-CNN vs 1-NN, rejection threshold/margin, final retrain. `train.py` defaults to 120 epochs.
-- [x] F8 live (`feat/sign-live`): server loads `sign/models/` (reloads on new WebSocket if retrained), emits tokens with `question` ("yn" brows up / "wh" brows down vs per-signer rest baseline) and `negation` (≥2 yaw reversals ≥6°). `/record` shows SignDict reference videos per label, model status, flags, token history.
-- Verified only on synthetic data: record via server → train (hold-out other signer 27/28) → live inference 8/8 with correct flags; inference 8.5 ms/sign on CPU.
-- [x] Tuning session on a real `SIGN_DUMP` (see Decisions).
-- [x] Recorded 15 × 15 p0 + 34 `_NONE` (adi), trained v0, live check: works, still some mistakes.
-- [ ] Retrain with more/varied data later.
-- [ ] Integration with Lane A: handoff branch `feat/sign-integration` + `LANE_A_HANDOFF.md` (utterance end 4 s / Enter, not 1.5 s). Merge to `main` only after user approval.
+- [x] F0 setup on `origin/main` (3286ac3). Nothing else is on `main`.
+- [x] F5–F8 done and working on the user's laptop with real signing.
+- [x] Tuning session on a real stream (results under Decisions).
+- [x] Dataset: 15 × 15 p0 + 34 `_NONE` (signer `adi`) in `sign/data/` (gitignored, local only, 12 MB). Model **v0** trained: cnn1d, hold-out 48/48 (same session, optimistic), 1-NN 41/48; threshold 0.6 / margin 0.3. Live: works "good enough", still mistakes → retrain later.
+- [x] **Handoff to Lane A pushed: `origin/feat/sign-integration`** (087370d) with `LANE_A_HANDOFF.md` (copy-paste prompt for person 1's agent, merge/conflict rules, F9 code, 4 s utterance gap, test steps) and v0 weights in `sign/models/`. `origin/feat/sign-live` is an older, fully contained push (can be deleted on user request).
+- [ ] Person 1 merges `feat/sign-integration` into their branch and integrates `<SignCamera>` (mount on "Anrufen"). Then joint test on the demo laptop, then merge to `main` with user approval.
+- [ ] Retrain with more/varied data (more samples, maybe a second signer); commit only `sign/models/config.json` + `model.pt`.
 
-Lane B branches are stacked (camera → service → training → live); `feat/sign-live` contains everything. `AGENTS.md` updates ride on the current feature branch.
-
-## User checkpoints (Lane B)
-1. After F5: user opens `http://localhost:3000/record`, reports FPS and whether the overlay aligns.
-2. After F6: user signs HALLO ×5, rests 10 s, makes random moves → expect exactly 5 files. Tune segmenter from saved files.
-3. Recording session: 15 × each p0 label + 30 × `_NONE`, same seat/light/camera as the demo. Optional hold-out: 5/label from person 1.
-4. After F7/F8: live test in infer mode, report misrecognitions; re-record confused labels.
-
-Meanwhile the user learns the 15 p0 signs (one variant each, from DW-DGS or SpreadTheSign) and fixes the demo spot. The agent cannot judge whether a sign is correct DGS.
+Branches: current work on `feat/sign-integration`. Older local stages: `feat/sign-camera` → `feat/sign-service` → `feat/sign-training` → `feat/sign-live` (all contained). Local `main` has 2 unpushed commits (AGENTS.md, contract change) that are also contained in the feature branches.
 
 ## Decisions and deviations from plan.md
-- Git: work on feature branches only. A feature reaches `main` only after it works on the user's laptop and the user says so. Ask before any push.
-- Signer name in sample files: `adi`.
-- Python **3.12** (`/usr/bin/python3.12`); there is no `python3.11` command on this machine.
-- npm packages pinned exactly to versions ≥ 7 days old at install time: next 16.4.6, react 19.3.0, livekit-client 2.23.0, livekit-server-sdk 2.19.1, @elevenlabs/client 1.35.0, @elevenlabs/elevenlabs-js 2.77.0, @mediapipe/tasks-vision 1.2.2. Do not add npm packages.
-- Python installs use `uv pip install --python .venv/bin/python --exclude-newer <today−7d>`; pin in `sign/requirements.txt` (fastapi 0.162.2, uvicorn 0.54.0, numpy 2.5.4, scikit-learn 1.9.1, torch 2.14.1+cu126).
-- Kept create-next-app defaults: `cacheComponents: true`, `partialPrefetching: true`, Turbopack, and `web/AGENTS.md` (Next.js rules, regenerated by `next dev`).
-- Next.js 16 differs from older versions: read `web/node_modules/next/dist/docs/` before writing Next code.
-- `ELEVEN_LABS_VOICE_ID` = "Susi" (`v3V1d2rk6528UrLKRuy8`, native German female, conversational shared voice). Works with `eleven_flash_v2_5` + `language_code: "de"` without adding it to the library.
-- `LIVEKIT_ROOM` not set; code default `praxis-demo`.
-- MediaPipe wasm from jsDelivr pinned to `@1.2.2` (update `WASM_URL` in `SignCamera.tsx` if the package version changes); models from `storage.googleapis.com/mediapipe-models` (hand_landmarker float16, pose_landmarker_lite float16). Needs internet at load.
-- Segmenter (`sign/core.py`, constants at top), replaces plan's F6 thresholds: both hands' palm centres in shoulder widths relative to the shoulder midpoint, One Euro filtered (min_cutoff 1, beta 3), assigned to signer sides by nearest pose wrist. Active hand = visible and above `REST_Y`=1.2 sw below shoulders. Start: active hand speed > 0.8 sw/s (or entering the space while moving) for 2 frames. End: no active hand for 130 ms (hands lowered/out of view), or speed < 0.5 for 250 ms, or 3 s cap. Gaps ≤ 3 frames tolerated. Simulated latency: start ~90–155 ms (pre-roll keeps onset frames), end ~145 ms after lowering hands, ~345 ms after pausing in space. Thresholds are guesses on simulated jitter; tune with a real `SIGN_DUMP`.
-- Real tuning log (`/tmp/sign_tuning_adi.jsonl`, 10 min, laptop/phone cam framed head-to-chest): hands leave the frame when lowered, so "hands down" = no hands = clean end ~150 ms later; slow signs with hands lowered between them segment perfectly (1 per sign). Signs chained with hands kept up mostly run into the 3 s cap: frame-to-frame and 150 ms-windowed speed stay 0.3–1.5 sw/s during real pauses, and a grid search (window 1/100/150 ms × END_SPEED 0.3–0.9 × END_STILL 150–400 ms) found no setting that ends those without cutting holds inside slow signs. Decision: keep thresholds; the signer lowers hands between signs (recording and demo). Brows: rest up 0.045 / down 0.034, raised 0.6–0.9, furrowed 0.3–0.9 → deltas 0.15 OK, 5/5 raised-brow signs flagged `yn`; head shakes ±40–60° yaw, 0 false negations in 71 segments.
-- Tuning loop: run the service with `SIGN_DUMP=/tmp/sign_stream.jsonl` (appends every received frame), then `cd sign && .venv/bin/python core.py /tmp/sign_stream.jsonl` replays it and prints state changes, segments and peak speed.
-- Face (added at user request, plan had it post-MVP): `SignCamera` runs FaceLandmarker (blendshapes + transformation matrix) and sends `face: {bs: {29 blendshapes}, rot: [yaw, pitch, roll] deg}` per frame; saved in samples. Hands every frame, pose/face alternate every 3rd frame (face costs 18 ms on GPU). Overlay shows brows/eyes/lips and a "brows ↑/↓" badge (threshold 0.4, untuned). Plan: face features feed the classifier (mouthing), and F8 derives a non-manual marker (question/negation) per token; that needs an optional field on `Token` in `contract.ts` → coordinate with Lane A on `main`.
-- Training data: no usable public DGS set for our vocabulary. `fhswf/dgs-pose` (HF) is no longer public; `fhswf/sign-language-avatar-gloss-dgs` (SignDict, 4182 words) has only 1–3 clips per word, mostly CC BY-NC-SA → used only as reference videos (`web/lib/signRefs.json`, served from `assets.wishlephant.com/signdict/videos/<key>.mp4`, with credit + license shown). Training uses the user's own recordings. Optional later: pretrain on Kaggle ASL ISLR (CC-BY 4.0, 54 GB, needs Kaggle API key).
-- `HF_TOKEN` is in `.env` (user `adityaladawa09`, fine-grained read).
-- `sign/models/` is committed (v0: cnn1d, 15×15 samples of adi + 34 `_NONE`, hold-out 48/48 same session, threshold 0.6 / margin 0.3; live still makes mistakes → retrain later, replace the two files). `sign/data/` (recordings) is gitignored and stays on this laptop. `SIGN_MODELS` / `SIGN_DATA` env vars override folders (used by tests).
-- Lane B additions beyond §6.3 (internal to `/record` ↔ service, no cross-lane impact): `POST /undo` deletes the last sample saved by this server process; WebSocket and `/undo` reject non-localhost origins; `SIGN_DATA` env var overrides `sign/data` (used for tests).
-- `/record` page: record/infer toggle, signer (default `adi`), label dropdown, big counter (target 15), beep + flash on each saved sample, undo, next label, counts list.
+- Git: feature branches only; `main` only after it works on the user's laptop and the user says so. Ask before every push.
+- Contract change (in `contract.ts` + `plan.md` §6.2/§6.6, F4 rule 8, F9 step 2): `Token.question?: "yn" | "wh"`, `Token.negation?: boolean`; `/api/sentence` gets `question` (last non-empty among tokens, else null) and `negation` (any). Backwards compatible.
+- **Signer lowers hands between signs** (recording and demo). Utterance ends **4 s** after the last token or on Enter (plan's 1.5 s changed; measured gaps between consecutive signs 2.5 s median, up to ~4.6 s).
+- Signer name in sample files: `adi`. Python **3.12** (no `python3.11` here).
+- npm packages pinned to versions ≥ 7 days old at install: next 16.4.6, react 19.3.0, livekit-client 2.23.0, livekit-server-sdk 2.19.1, @elevenlabs/client 1.35.0, @elevenlabs/elevenlabs-js 2.77.0, @mediapipe/tasks-vision 1.2.2. No new npm packages.
+- Python installs: `uv pip install --python .venv/bin/python --exclude-newer <today−7d>`; pins in `sign/requirements.txt` (fastapi 0.162.2, uvicorn 0.54.0, numpy 2.5.4, scikit-learn 1.9.1, torch 2.14.1+cu126; CPU-only machines: torch 2.14.1 from the cpu index).
+- Next.js 16 with create-next-app defaults (`cacheComponents`, `partialPrefetching`, Turbopack, `web/AGENTS.md`). Read `web/node_modules/next/dist/docs/` before writing Next code.
+- `ELEVEN_LABS_VOICE_ID` = "Susi" (`v3V1d2rk6528UrLKRuy8`, German female), works with `eleven_flash_v2_5` + `language_code: "de"`. `LIVEKIT_ROOM` unset → `praxis-demo`.
+- `SignCamera.tsx`: MediaPipe wasm from jsDelivr `@1.2.2`, models from `storage.googleapis.com/mediapipe-models` (hand float16, pose lite float16, face landmarker float16; ~32 MB first load, needs internet). 640×480@30, hands every frame, pose/face alternate every 3rd frame. Face sends `{bs: 29 blendshapes, rot: [yaw, pitch, roll]}`. Detection loop wrapped in try/catch (skips bad frames; error after 90 consecutive). TFLite "XNNPACK delegate" INFO line logged via console.error is filtered (it's not an error). Camera picker top-right when >1 camera (localStorage `signCameraId`, falls back to default). Brow badge threshold 0.3. Display mirrored via CSS only.
+- Segmenter (`sign/core.py` constants): palm centres in shoulder widths vs shoulder midpoint, One Euro filtered, sides by nearest pose wrist. Active = visible and above `REST_Y` 1.2. Start: speed > 0.8 sw/s for 2 frames. End: no active hand 130 ms, or speed < 0.5 for 250 ms, or 3 s cap.
+- Tuning results (log kept at `/tmp/sign_tuning_adi.jsonl`, 10 min): user's camera framing hides lowered hands → clean end ~150 ms after lowering; slow signs with hands lowered segment 1:1. Signs chained with hands up run into the 3 s cap; a grid search (speed window 1/100/150 ms × END_SPEED 0.3–0.9 × END_STILL 150–400 ms) found no setting that splits them without cutting holds inside slow signs → thresholds kept, hands-down rule instead. Brows: rest up 0.045 / down 0.034, raised 0.6–0.9, furrowed 0.3–0.9 → deltas 0.15 OK (5/5 flagged). Head shakes ±40–60° yaw, 0 false negations in 71 segments.
+- Features: 159-dim per frame (2×[63 handshape, 4 location vs shoulders/nose, 2 velocity, 1 present] + 18 mouth/jaw blendshapes + face flag), 32 frames. Brows/head are token flags, not classifier input. 1D-CNN vs 1-NN, augmentation, rejection threshold/margin, final retrain on all data. Inference ~8.5 ms/sign CPU. `train.py` ~4 min on the GTX 1050 for 259 samples.
+- Server (`sign/server.py`): loads `sign/models/` on each new WebSocket (picks up retrains). Localhost origins only. `POST /undo` (last sample of this process), `POST /reset/{label}?signer=` (all of that signer's samples for a label), `GET /health` (`model`, `fake`, counts). `SIGN_FAKE=A,B,C`: without a model, each detected sign emits the next gloss (for Lane A loop tests). `SIGN_DUMP=<file>` appends every frame (tuning; replay with `core.py <file>`). `SIGN_MODELS` / `SIGN_DATA` override folders.
+- `/record`: always light theme (user's browser is dark mode), 50/50 columns. Record mode: only p0 + `_NONE` (p1 numbers/extras hidden, not recorded), target 15 (`_NONE` 30), auto-advance to the next unfinished label with double beep + 2.5 s pause (sends infer meanwhile), undo last, red reset-label button, SignDict reference video. Infer mode: dark prediction panel (green label / amber `?` + confidence, top 3, history chips), sentence builder (4 s gap / Enter / Backspace, flags shown).
+- Training data: no usable public DGS set for our vocabulary (`fhswf/dgs-pose` gone; SignDict HF set has 1–3 clips/word, mostly CC BY-NC-SA → reference videos only, `web/lib/signRefs.json`). Optional later: pretrain on Kaggle ASL ISLR (54 GB, needs Kaggle API key) — only if accuracy for other signers matters.
+- Practice sheet: `cd sign && .venv/bin/python make_practice.py` → `practice/index.html` (gitignored media: SignDict video + 6 key frames per sign, recording guide).
+- `_NONE` = everyday non-sign movements (scratching, glasses, mouse, cup, stretch, casual wave, aborted sign); model output `_NONE` → `?`.
 
 ## Environment facts
-- Repo: `/home/adityaladawa/Desktop/mghack`, remote `https://github.com/DarshanScripts/magde-hack.git`.
-- `.env` at repo root (gitignored), symlinked as `web/.env`. Keys: `ELEVEN_LABS_API_KEY`, `ELEVEN_LABS_VOICE_ID`, `OPENROUTER_API_KEY`, `LLM_MODEL=google/gemma-4-31b-it`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `NGROK_AUTH_TOKEN`. Never print or commit values; pass `ELEVEN_LABS_API_KEY` explicitly (SDK default name differs).
-- GPU: GTX 1050 Mobile (sm_61, driver supports CUDA ≤ 12.6) + Intel UHD 630 (Optimus), KDE Wayland. torch 2.14.1+cu126 verified running CUDA conv on it. CUDA only matters for Python training; browser MediaPipe runs on WebGL in Chrome's GPU process.
-- Chrome defaults to the Intel iGPU. To run MediaPipe on the GTX 1050, launch a separate Chrome via PRIME offload under XWayland (Wayland + NVIDIA offload crashes Chrome's GPU process):
-  `prime-run google-chrome-stable --ozone-platform=x11 --user-data-dir=/tmp/chrome-nvidia http://localhost:3000/record`
-  Verify with `chrome://gpu` (GL_RENDERER = NVIDIA) or `/proc/<gpu-process pid>/fd` → `/dev/nvidia0`. `nvidia-smi` does not list Chrome (sandbox PID namespace).
-- Webcam (`/dev/video0`): 1280×720 is 30 fps only as MJPG, 10 fps as YUYV; 640×480 is 30 fps in both. `SignCamera` requests 640×480 (MediaPipe downsizes internally anyway). Verified camera delivers 30.0 fps.
-- MediaPipe cost on GTX 1050 (in-browser, per frame): hands 12 ms, pose lite 17 ms on GPU; CPU delegate 98 / 53 ms. Pose runs every 2nd frame (`POSE_EVERY`); `/record` reaches ~20–27 fps (Intel iGPU in Brave was ~20). The user's daily browser is Brave (Wayland, Intel); the GPU Chrome must be a separate instance, and only one app can hold the webcam.
-- Chrome installed: 151.0.7922.137 (AUR `google-chrome`); latest stable 157. Updating needs sudo: `yay -S google-chrome` (the user runs it).
-- Agent can measure the page itself: launch the GPU Chrome with `--remote-debugging-port=9222 --use-fake-ui-for-media-stream` and use the DevTools protocol (`SystemInfo.getInfo`, `Runtime.evaluate`) via `sign/.venv/bin/python` + `websockets`.
-- When killing processes by pattern, use a bracket pattern (`pkill -f "[/]opt/google/..."`) or the shell kills itself.
-- ngrok 3.39.13 in `~/.local/bin`, authtoken configured. One session per token.
-- Node 26, npm 11, `uv` available.
+- Repo `/home/adityaladawa/Desktop/mghack`, remote `https://github.com/DarshanScripts/magde-hack.git`.
+- `.env` at repo root (gitignored), symlinked as `web/.env`. Keys: `ELEVEN_LABS_API_KEY`, `ELEVEN_LABS_VOICE_ID`, `OPENROUTER_API_KEY`, `LLM_MODEL=google/gemma-4-31b-it`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `NGROK_AUTH_TOKEN`, `HF_TOKEN`. Never print or commit values; pass `ELEVEN_LABS_API_KEY` explicitly.
+- GPU: GTX 1050 Mobile (sm_61, CUDA ≤ 12.6) + Intel UHD 630, KDE Wayland. CUDA only for training. GPU Chrome (separate instance, X11 mode): `prime-run google-chrome-stable --ozone-platform=x11 --user-data-dir=/tmp/chrome-nvidia http://localhost:3000/record` (`run.sh` does this). Brave (daily browser) stays on Intel. Only one app can hold a webcam.
+- Cameras: laptop `/dev/video0` (640×480@30); **Pixel 7 in Android USB webcam mode** `/dev/video2` (MJPG/YUYV up to 1080p@60, 640×480@30 OK). Phone stream is landscape only → mount the phone sideways. Record and demo with the same camera.
+- MediaPipe in GPU Chrome: hands 12 ms, pose 17 ms, face 18 ms per frame; ~16–24 fps with hands visible.
+- Killing processes: `pkill -f "[u]vicorn server:app"` kills the calling shell too if the same command line contains the literal text later (e.g. a restart in the same call) → kill and restart in separate commands, or use `./stop.sh`.
+- Chrome 151 installed (latest 157; user updates via `yay -S google-chrome`). ngrok 3.39.13 in `~/.local/bin`. Node 26, npm 11, `uv`.
+- Agent can inspect the page via DevTools protocol: launch GPU Chrome with `--remote-debugging-port=9222 --use-fake-ui-for-media-stream`.
 
 ## Commands
 ```bash
-cd web && npm run dev                      # http://localhost:3000
+./run.sh [page]                            # sign service :8765 (SIGN_DUMP on) + Next :3000 + browser; default /record
+./stop.sh                                  # stop service, Next, GPU Chrome
 cd web && npx tsc --noEmit && npm run lint # verify web code
-cd sign && .venv/bin/uvicorn server:app --port 8765
-cd sign && .venv/bin/python train.py
+cd sign && .venv/bin/python train.py       # retrain from sign/data → sign/models
+cd sign && .venv/bin/python core.py <dump> # replay a stream log (segmentation tuning)
 ngrok http 3000                            # callee device only
 ```
-Teammate setup after pull: `cd web && npm ci && ln -s ../.env .env`; `cd sign && python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt`.
+Teammate setup after pull: `cd web && npm ci && ln -s ../.env .env`; Python venv per `LANE_A_HANDOFF.md` §6.
