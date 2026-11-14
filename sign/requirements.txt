@@ -1,0 +1,7 @@
+# Python 3.12. GTX 1050 (Pascal) needs the cu126 wheel; CPU-only: drop the index line and use torch==2.14.1
+--extra-index-url https://download.pytorch.org/whl/cu126
+fastapi==0.162.2
+uvicorn[standard]==0.54.0
+numpy==2.5.4
+scikit-learn==1.9.1
+torch==2.14.1+cu126

@@ -1,0 +1,11 @@
+# secrets
+.env
+.env.*
+
+# node
+node_modules/
+.next/
+
+# python
+.venv/
+__pycache__/
