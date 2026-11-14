@@ -33,8 +33,11 @@ const de = {
   ringing: "Ruft an",
   practiceHungUp: "Die Praxis hat aufgelegt.",
   connectionLost: "Die Verbindung wurde getrennt.",
+  flagYesNo: "Ja/Nein-Frage (Brauen hoch)",
+  flagWh: "W-Frage (Brauen runter)",
+  flagNegation: "Verneinung (Kopfschütteln)",
   noSoundOutput:
-    "Die Tonausgabe dieses Computers funktioniert nicht. Ihre Stimme wird übertragen, aber die Praxis ist hier nicht zu hören und es gibt keine Untertitel. Bitte in Windows ein anderes Ausgabegerät wählen und neu anrufen.",
+    "Die Tonausgabe dieses Computers scheint nicht zu funktionieren. Ihre Stimme wird trotzdem übertragen. Wenn Sie die Praxis nicht hören oder keine Untertitel erscheinen, wählen Sie in Windows ein anderes Ausgabegerät und rufen Sie neu an.",
   duplicateSigner:
     "Ein anderes Gerät hat diese Anrufer-Seite geöffnet und den Anruf übernommen. Das zweite Gerät muss /callee öffnen.",
   duplicateCallee: "Ein anderes Gerät hat die Praxis-Seite geöffnet und den Anruf übernommen.",
@@ -93,8 +96,11 @@ const en: typeof de = {
   ringing: "Ringing",
   practiceHungUp: "The practice hung up.",
   connectionLost: "The connection was lost.",
+  flagYesNo: "Yes/no question (brows up)",
+  flagWh: "W-question (brows down)",
+  flagNegation: "Negation (head shake)",
   noSoundOutput:
-    "This computer's sound output is not working. Your voice is sent, but the practice cannot be heard here and there are no captions. Pick another output device in Windows, then call again.",
+    "This computer's sound output does not seem to be working. Your voice is still sent. If you cannot hear the practice or get no captions, pick another output device in Windows and call again.",
   duplicateSigner:
     "Another device opened this caller page and took over the call. The second device has to open /callee instead.",
   duplicateCallee: "Another device opened the practice page and took over the call.",

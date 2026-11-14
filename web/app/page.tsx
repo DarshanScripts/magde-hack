@@ -11,7 +11,7 @@ import { useI18n } from "@/lib/i18n";
 import { startCaptions, type CaptionState } from "@/lib/stt";
 import { setProfileName, useMockMode, useProfileName } from "@/lib/profile";
 import labels from "@/lib/labels.json";
-import { IDENTITY, MOCK_CONTACTS, TTS_TRACK_NAME, type Caption, type Turn } from "@/lib/contract";
+import { IDENTITY, MOCK_CONTACTS, TTS_TRACK_NAME, type Caption, type Token, type Turn } from "@/lib/contract";
 
 const UNCERTAIN = "?";
 const SENTENCE_DELAY_MS = 1500;
@@ -19,6 +19,11 @@ const HISTORY_TURNS = 6;
 const PILL =
   "h-8 shrink-0 cursor-pointer rounded-full px-4 text-sm font-medium transition duration-200 ease-out-soft active:scale-[0.97]";
 const MOCK_LABELS = [...labels.p0, ...labels.p1, UNCERTAIN];
+const MOCK_FLAGS: { key: "flagYesNo" | "flagWh" | "flagNegation"; question?: Token["question"] }[] = [
+  { key: "flagYesNo", question: "yn" },
+  { key: "flagWh", question: "wh" },
+  { key: "flagNegation" },
+];
 
 type Session = {
   leave(): Promise<void>;
@@ -34,12 +39,13 @@ export default function SignerPage() {
   const [captionState, setCaptionState] = useState<CaptionState | null>(null);
   const [theirTrack, setTheirTrack] = useState<MediaStreamTrack | null>(null);
   const [myTrack, setMyTrack] = useState<MediaStreamTrack | null>(null);
-  const [chips, setChips] = useState<string[]>([]);
+  const [chips, setChips] = useState<Token[]>([]);
+  const [mockFlags, setMockFlags] = useState<Pick<Token, "question" | "negation">>({});
   const [confirm, setConfirm] = useState(false);
   const [preview, setPreview] = useState<{ id: string; text: string } | null>(null);
   const session = useRef<Session | null>(null);
   const nextId = useRef(0);
-  const pending = useRef<{ chips: string[]; timer?: ReturnType<typeof setTimeout> }>({ chips: [] });
+  const pending = useRef<{ chips: Token[]; timer?: ReturnType<typeof setTimeout> }>({ chips: [] });
   const history = useRef<Turn[]>([]);
   const confirmRef = useRef(false);
   const previewRef = useRef<{ id: string; text: string } | null>(null);
@@ -51,14 +57,15 @@ export default function SignerPage() {
     history.current = captions.filter((c) => c.final || c.who === "them").slice(-HISTORY_TURNS).map(({ who, text }) => ({ who, text }));
   }, [captions]);
 
-  function updateChips(next: string[]) {
+  function updateChips(next: Token[]) {
     clearTimeout(pending.current.timer);
     pending.current = { chips: next, timer: next.length ? setTimeout(sendChips, SENTENCE_DELAY_MS) : undefined };
     setChips(next);
   }
 
-  function addToken(label: string) {
-    if (session.current?.voice) updateChips([...pending.current.chips, label]);
+  // The single entry point for recognized signs: the camera and the mock buttons both call it.
+  function addToken(token: Token) {
+    if (session.current?.voice) updateChips([...pending.current.chips, token]);
   }
 
   async function speakCaption(id: string, text: string) {
@@ -74,8 +81,12 @@ export default function SignerPage() {
 
   // Recognized signs -> one German sentence -> spoken into the call.
   async function sendChips() {
-    const gloss = pending.current.chips.filter((label) => label !== UNCERTAIN);
+    const real = pending.current.chips.filter((c) => c.label !== UNCERTAIN);
+    const gloss = real.map((c) => c.label);
+    const question = real.findLast((c) => c.question)?.question ?? null;
+    const negation = real.some((c) => c.negation);
     updateChips([]);
+    setMockFlags({});
     discardPreview();
     if (!gloss.length || !session.current?.voice) return;
     const id = `me-${nextId.current++}`;
@@ -84,7 +95,7 @@ export default function SignerPage() {
       const res = await fetch("/api/sentence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tokens: gloss, history: history.current, profile: { name: profileName } }),
+        body: JSON.stringify({ tokens: gloss, history: history.current, profile: { name: profileName }, question, negation }),
       });
       if (!res.ok) throw new Error("sentence request failed");
       const { text } = (await res.json()) as { text: string };
@@ -290,12 +301,34 @@ export default function SignerPage() {
                     key={label}
                     type="button"
                     disabled={!connected}
-                    onClick={() => addToken(label)}
+                    onClick={() => addToken({ label, conf: 1, t: Date.now(), ...mockFlags })}
                     className="h-9 cursor-pointer rounded-full border border-line bg-surface px-3 font-mono text-xs tracking-wide shadow-card transition duration-200 ease-out-soft hover:border-accent hover:text-accent active:scale-[0.96] disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-line"
                   >
                     {label}
                   </button>
                 ))}
+                <span className="basis-full" />
+                {MOCK_FLAGS.map((flag) => {
+                  const on = flag.question ? mockFlags.question === flag.question : !!mockFlags.negation;
+                  return (
+                    <button
+                      key={flag.key}
+                      type="button"
+                      disabled={!connected}
+                      aria-pressed={on}
+                      onClick={() =>
+                        setMockFlags((f) =>
+                          flag.question ? { ...f, question: on ? undefined : flag.question } : { ...f, negation: on ? undefined : true },
+                        )
+                      }
+                      className={`h-9 cursor-pointer rounded-full border px-3 text-xs shadow-card transition duration-200 ease-out-soft active:scale-[0.96] disabled:cursor-not-allowed disabled:text-faint ${
+                        on ? "border-accent bg-accent text-white" : "border-line bg-surface text-muted hover:border-accent hover:text-accent"
+                      }`}
+                    >
+                      <span>{t(flag.key)}</span>
+                    </button>
+                  );
+                })}
               </div>
             ) : null}
           </div>
@@ -304,14 +337,24 @@ export default function SignerPage() {
             {chips.length ? (
               <>
                 <span data-chips className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-                  {chips.map((label, i) => (
+                  {chips.map((chip, i) => (
                     <span
                       key={i}
-                      className={`animate-rise rounded-full px-3 py-1 font-mono text-xs tracking-wide ${
-                        label === UNCERTAIN ? "bg-sunken text-faint" : "bg-accent/10 text-accent"
+                      className={`animate-rise flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-xs tracking-wide ${
+                        chip.label === UNCERTAIN ? "bg-sunken text-faint" : "bg-accent/10 text-accent"
                       }`}
                     >
-                      {label}
+                      <span>{chip.label}</span>
+                      {chip.question ? (
+                        <span title={t(chip.question === "yn" ? "flagYesNo" : "flagWh")} className="rounded-full bg-accent px-1.5 text-[10px] text-white">
+                          {chip.question === "yn" ? "?" : "W?"}
+                        </span>
+                      ) : null}
+                      {chip.negation ? (
+                        <span title={t("flagNegation")} className="rounded-full bg-danger px-1.5 text-[10px] text-white">
+                          ¬
+                        </span>
+                      ) : null}
                     </span>
                   ))}
                 </span>

@@ -16,6 +16,8 @@ Rules:
 5. NAME → "Mein Name ist {profile.name}."  WIEDERHOLEN → "Entschuldigung, können Sie das bitte wiederholen?"
 6. Number + UHR (+ VORMITTAG/NACHMITTAG/ABEND) → a clock time ("NEUN UHR ABEND" → "21 Uhr").
 7. Never give medical advice. Only express what the caller signed.
+8. question = "yn" → phrase it as a yes/no question ("MORGEN NACHMITTAG" → "Geht es morgen Nachmittag?").
+   question = "wh" → phrase it as a W-question (wann/was/wo/wer/wie). negation = true → negate the statement ("HEUTE" → "Heute geht es nicht.").
 Return JSON: {"text": "<German sentence>"}`;
 
 // Used when the model is slow or unavailable, so the caller is never left without a voice.
@@ -34,6 +36,8 @@ export async function POST(request: Request) {
     tokens?: unknown;
     history?: unknown;
     profile?: { name?: unknown };
+    question?: unknown;
+    negation?: unknown;
   } | null;
 
   const tokens = (Array.isArray(body?.tokens) ? body.tokens : [])
@@ -48,6 +52,8 @@ export async function POST(request: Request) {
     .slice(-HISTORY_TURNS)
     .map((t) => ({ who: t.who, text: clean(t.text, 300) }));
   const name = clean(body?.profile?.name, 60);
+  const question = body?.question === "yn" || body?.question === "wh" ? body.question : null;
+  const negation = body?.negation === true;
 
   const { OPENROUTER_API_KEY, LLM_MODEL } = process.env;
   if (!OPENROUTER_API_KEY || !LLM_MODEL) {
@@ -58,6 +64,8 @@ export async function POST(request: Request) {
     `History (oldest first; "them" is the practice, "me" is the caller):`,
     ...(history.length ? history.map((t) => `${t.who}: ${t.text}`) : ["(none)"]),
     `profile.name: ${name || "(unknown)"}`,
+    `question: ${question ?? "none"}`,
+    `negation: ${negation}`,
     `Tokens: ${tokens.join(" ")}`,
   ].join("\n");
 
