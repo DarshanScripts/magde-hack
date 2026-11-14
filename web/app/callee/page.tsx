@@ -5,7 +5,7 @@ import CallTimer from "@/components/CallTimer";
 import LevelBars from "@/components/LevelBars";
 import LatticeLoader from "@/components/reactbits/LatticeLoader";
 import { HandIcon, HangUpIcon, MicIcon, MicOffIcon, PhoneIcon } from "@/components/icons";
-import { joinCall } from "@/lib/call";
+import { joinCall, describeCallError } from "@/lib/call";
 import { IDENTITY } from "@/lib/contract";
 
 type Phase = "idle" | "connecting" | "waiting" | "connected";
@@ -51,8 +51,7 @@ export default function CalleePage() {
       await joined.room.localParticipant.setMicrophoneEnabled(true);
     } catch (err) {
       console.error(err);
-      const denied = err instanceof DOMException && err.name === "NotAllowedError";
-      leave(denied ? "Bitte erlauben Sie den Zugriff auf das Mikrofon." : "Beitreten ist fehlgeschlagen.");
+      leave(describeCallError(err));
     }
   }
 

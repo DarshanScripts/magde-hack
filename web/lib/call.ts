@@ -12,6 +12,18 @@ export function audioContext(): AudioContext {
   return ctx;
 }
 
+// Turns a failed join into a sentence the person on the page can act on.
+export function describeCallError(err: unknown): string {
+  if (typeof window !== "undefined" && !window.isSecureContext) {
+    return "Diese Adresse ist nicht sicher (kein HTTPS). Bitte die https-Adresse von ngrok oder localhost öffnen.";
+  }
+  const name = err instanceof Error ? err.name : "";
+  if (name === "NotAllowedError") return "Bitte erlauben Sie den Zugriff auf das Mikrofon.";
+  if (name === "NotFoundError" || name === "NotReadableError") return "Es wurde kein nutzbares Mikrofon gefunden.";
+  const detail = err instanceof Error ? err.message : String(err);
+  return `Verbindung fehlgeschlagen: ${detail}`;
+}
+
 export async function joinCall(
   identity: Identity,
   on: {

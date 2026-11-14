@@ -5,7 +5,7 @@ import Captions from "@/components/Captions";
 import DialBar, { type CallPhase } from "@/components/DialBar";
 import LevelBars from "@/components/LevelBars";
 import { HandIcon, SendIcon } from "@/components/icons";
-import { createVoice, joinCall } from "@/lib/call";
+import { createVoice, joinCall, describeCallError } from "@/lib/call";
 import { IDENTITY, MOCK_CONTACTS, TTS_TRACK_NAME, type Caption } from "@/lib/contract";
 
 type Session = {
@@ -64,7 +64,7 @@ export default function SignerPage() {
       setPhase((p) => (p === "connecting" ? "ringing" : p));
     } catch (err) {
       console.error(err);
-      hangUp("Der Anruf konnte nicht aufgebaut werden.");
+      hangUp(describeCallError(err));
     }
   }
 
