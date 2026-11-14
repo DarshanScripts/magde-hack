@@ -15,3 +15,6 @@ sign/data/
 
 # practice sheet media (SignDict licenses; regenerate with sign/make_practice.py)
 practice/
+
+# run.sh logs on Windows
+.run/
