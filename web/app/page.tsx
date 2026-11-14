@@ -23,8 +23,8 @@ const SignCamera = dynamic(() => import("@/components/SignCamera"), {
 const UNCERTAIN = "?";
 const SIGN_OFFLINE: SignStatus = { state: "rest", fps: 0, online: false };
 // Signers lower their hands between signs: Lane B measured 2.5 s between signs (median), up to ~4.6 s.
-// 3.5 s gives time to think between signs; Enter sends at once.
-const SENTENCE_DELAY_MS = 3500;
+// 4 s gives time to think between signs; Enter sends at once.
+const SENTENCE_DELAY_MS = 4000;
 const HISTORY_TURNS = 6;
 const PILL = "h-8 shrink-0 cursor-pointer rounded-full px-4 text-sm font-medium transition duration-200 ease-out-soft active:scale-[0.97]";
 const MOCK_LABELS = [...labels.p0, ...labels.p1, UNCERTAIN];
