@@ -8,8 +8,8 @@ import { SIGN_WS_URL, type SignStatus, type Token } from "@/lib/contract";
 
 const SignCamera = dynamic(() => import("@/components/SignCamera"), { ssr: false });
 const SERVICE_URL = SIGN_WS_URL.replace(/^ws/, "http").replace(/\/ws$/, "");
-const TARGET = 15;
-const NONE_TARGET = 30;
+const TARGET = 25;
+const NONE_TARGET = 40;
 const EXTRA = ["KOPF", "BAUCH", "FIEBER", "VORMITTAG", "ABEND", "ZEIT", "OKAY", "NICHT", "MOECHTEN",
   "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS", "SIEBEN"];
 const RECORD_ORDER = [...labels.p0, ...EXTRA, labels.none];
@@ -34,7 +34,7 @@ function flags(tokens: Token[]) {
   const question = [...tokens].reverse().find((t) => t.question)?.question ?? null;
   return { question, negation: tokens.some((t) => t.negation) };
 }
-const P0_TARGET = 25; // 15 normal + 10 fast takes
+const P0_TARGET = 35; // 15 normal + 20 fast takes
 const targetOf = (l: string) => (l === labels.none ? NONE_TARGET : labels.p0.includes(l) ? P0_TARGET : TARGET);
 const REFS: Record<string, { video: string; word: string; credit: string; license: string }> = refs;
 
