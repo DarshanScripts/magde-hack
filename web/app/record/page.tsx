@@ -23,7 +23,7 @@ function beep() {
 }
 
 export default function RecordPage() {
-  const [mode, setMode] = useState<"record" | "infer">("record");
+  const [mode, setMode] = useState<"record" | "infer">("infer");
   const [signer, setSigner] = useState("adi");
   const [label, setLabel] = useState(labels.p0[0]);
   const [counts, setCounts] = useState<Record<string, number>>({});
