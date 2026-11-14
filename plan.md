@@ -171,13 +171,16 @@ Browser → service:
 ```jsonc
 {"type":"frame","t":1731580000123,"w":1280,"h":720,
  "hands":[{"handedness":"Left","score":0.97,"lm":[[0.5123,0.6341,-0.0121], /* 21 points */]}],
- "pose":[[0.5011,0.3122,-0.2100,0.99], /* 33 points: x,y,z,visibility */]}   // pose may be null
+ "pose":[[0.5011,0.3122,-0.2100,0.99], /* 33 points: x,y,z,visibility */],   // pose may be null
+ "face":{"bs":{"browInnerUp":0.62,"jawOpen":0.10, /* 29 blendshapes */},"rot":[-4.1,12.0,2.3]}}   // yaw,pitch,roll in degrees; may be null
 {"type":"mode","mode":"infer"}
 {"type":"mode","mode":"record","label":"TERMIN","signer":"aditya"}
 {"type":"reset"}
 ```
 - Coordinates are MediaPipe normalised image coordinates (0–1) of the **non-mirrored** frame, rounded to 4 decimals.
 - `t` is in milliseconds and must strictly increase. About 30 frames per second; `hands` may be `[]`.
+- Hands run every frame; pose and face run every 3rd frame (alternating) and the last result is repeated in between.
+- Face = DGS non-manual signals: brows (yes/no question up, wh-question down), eyes, mouth/jaw (mouthing), head rotation (nod/shake).
 
 Service → browser:
 ```jsonc
@@ -193,7 +196,7 @@ Service → browser:
 ### 6.4 Recorded sample: `sign/data/<LABEL>/<signer>_<unix_ms>.json`
 
 ```json
-{"label":"TERMIN","signer":"aditya","w":1280,"h":720,"frames":[{"t":0,"hands":[],"pose":[]}]}
+{"label":"TERMIN","signer":"adi","w":640,"h":480,"frames":[{"t":0,"hands":[],"pose":[],"face":null}]}
 ```
 Store **raw frames** (including pre/post padding), not features. Features can then change later without re-recording.
 

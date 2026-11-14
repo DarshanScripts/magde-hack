@@ -13,7 +13,7 @@ DGS (German Sign Language) → German voice over a browser-to-browser LiveKit ca
 ## Status
 - [x] F0 setup, pushed to `main` (commit 3286ac3). `AGENTS.md` committed on local `main` (not pushed).
 - [~] F5 sign camera: code done on `feat/sign-camera` (local). Waiting for checkpoint 1.
-- [~] F6 sign service + `/record` page: code done on `feat/sign-service` (branched from `feat/sign-camera`, local). Segmenter passes simulated tests (jitter → 0 segments, 5 signs → 5, forced cut, hand leaving). Waiting for checkpoint 2.
+- [~] F6 sign service + `/record` page: code done on `feat/sign-service` (branched from `feat/sign-camera`, local). Low-latency segmenter v2 passes simulated tests (jitter still/lowered → 0, 2 signs with 0.4 s pause → 2, 5 signs from lap → 5, 1-frame dropouts, hand leaving, 3 s cap, twitch). Waiting for checkpoint 2 with a real `SIGN_DUMP`.
 - [ ] F7 data + training (`feat/sign-training`, branch from `feat/sign-service`)
 - [ ] F8 live recognition (`feat/sign-live`)
 
@@ -38,7 +38,9 @@ Meanwhile the user learns the 15 p0 signs (one variant each, from DW-DGS or Spre
 - `ELEVEN_LABS_VOICE_ID` = "Susi" (`v3V1d2rk6528UrLKRuy8`, native German female, conversational shared voice). Works with `eleven_flash_v2_5` + `language_code: "de"` without adding it to the library.
 - `LIVEKIT_ROOM` not set; code default `praxis-demo`.
 - MediaPipe wasm from jsDelivr pinned to `@1.2.2` (update `WASM_URL` in `SignCamera.tsx` if the package version changes); models from `storage.googleapis.com/mediapipe-models` (hand_landmarker float16, pose_landmarker_lite float16). Needs internet at load.
-- Segmenter speed = dominant (signer's right) wrist, EMA-smoothed (α 0.5), measured over a 3-frame lag, in shoulder widths/s. `END_STILL_MS` = 300 (plan said 350) so a ~0.5 s pause separates signs. All constants at the top of `sign/core.py`.
+- Segmenter (`sign/core.py`, constants at top), replaces plan's F6 thresholds: both hands' palm centres in shoulder widths relative to the shoulder midpoint, One Euro filtered (min_cutoff 1, beta 3), assigned to signer sides by nearest pose wrist. Active hand = visible and above `REST_Y`=1.2 sw below shoulders. Start: active hand speed > 0.8 sw/s (or entering the space while moving) for 2 frames. End: no active hand for 130 ms (hands lowered/out of view), or speed < 0.5 for 250 ms, or 3 s cap. Gaps ≤ 3 frames tolerated. Simulated latency: start ~90–155 ms (pre-roll keeps onset frames), end ~145 ms after lowering hands, ~345 ms after pausing in space. Thresholds are guesses on simulated jitter; tune with a real `SIGN_DUMP`.
+- Tuning loop: run the service with `SIGN_DUMP=/tmp/sign_stream.jsonl` (appends every received frame), then `cd sign && .venv/bin/python core.py /tmp/sign_stream.jsonl` replays it and prints state changes, segments and peak speed.
+- Face (added at user request, plan had it post-MVP): `SignCamera` runs FaceLandmarker (blendshapes + transformation matrix) and sends `face: {bs: {29 blendshapes}, rot: [yaw, pitch, roll] deg}` per frame; saved in samples. Hands every frame, pose/face alternate every 3rd frame (face costs 18 ms on GPU). Overlay shows brows/eyes/lips and a "brows ↑/↓" badge (threshold 0.4, untuned). Plan: face features feed the classifier (mouthing), and F8 derives a non-manual marker (question/negation) per token; that needs an optional field on `Token` in `contract.ts` → coordinate with Lane A on `main`.
 - Lane B additions beyond §6.3 (internal to `/record` ↔ service, no cross-lane impact): `POST /undo` deletes the last sample saved by this server process; WebSocket and `/undo` reject non-localhost origins; `SIGN_DATA` env var overrides `sign/data` (used for tests).
 - `/record` page: record/infer toggle, signer (default `adi`), label dropdown, big counter (target 15), beep + flash on each saved sample, undo, next label, counts list.
 

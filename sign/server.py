@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core import ROOT, Segmenter, load_labels
 
 DATA = Path(os.environ.get("SIGN_DATA", ROOT / "data"))
+DUMP = os.environ.get("SIGN_DUMP")
 P0, P1, NONE = load_labels()
 LABELS = [*P0, *P1, NONE]
 LOCAL_ORIGIN = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
@@ -31,7 +32,7 @@ def count(label: str) -> int:
 
 def save(label: str, signer: str, seg: list[dict]) -> Path:
     t0 = seg[0]["t"]
-    frames = [{"t": f["t"] - t0, "hands": f.get("hands") or [], "pose": f.get("pose")} for f in seg]
+    frames = [{"t": f["t"] - t0, "hands": f.get("hands") or [], "pose": f.get("pose"), "face": f.get("face")} for f in seg]
     d = DATA / label
     d.mkdir(parents=True, exist_ok=True)
     path = d / f"{signer}_{int(time.time() * 1000)}.json"
@@ -68,6 +69,7 @@ async def ws_endpoint(ws: WebSocket):
     mode, label, signer = "infer", None, None
     times: deque[float] = deque()
     last_state, last_status = None, 0.0
+    dump = open(DUMP, "a") if DUMP else None
 
     async def error(message: str):
         await ws.send_json({"type": "error", "message": message})
@@ -82,6 +84,8 @@ async def ws_endpoint(ws: WebSocket):
             kind = m.get("type")
 
             if kind == "frame":
+                if dump:
+                    dump.write(json.dumps(m, separators=(",", ":")) + "\n")
                 now = time.monotonic()
                 times.append(now)
                 while now - times[0] > 1:
@@ -116,3 +120,6 @@ async def ws_endpoint(ws: WebSocket):
                 await error(f"unknown message type {kind!r}")
     except WebSocketDisconnect:
         pass
+    finally:
+        if dump:
+            dump.close()
