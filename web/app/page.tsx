@@ -8,6 +8,7 @@ import LevelBars from "@/components/LevelBars";
 import { HandIcon, SendIcon } from "@/components/icons";
 import { createVoice, joinCall, describeCallError } from "@/lib/call";
 import { useI18n } from "@/lib/i18n";
+import { startCaptions } from "@/lib/stt";
 import { IDENTITY, MOCK_CONTACTS, TTS_TRACK_NAME, type Caption } from "@/lib/contract";
 
 type Session = {
@@ -86,6 +87,32 @@ export default function SignerPage() {
       setNotice(t("ttsFailed"));
     }
   }
+
+  // The practice's speech becomes "them" captions: one bubble grows with the partials, then turns final.
+  useEffect(() => {
+    if (!theirTrack) return;
+    let stop: (() => void) | undefined;
+    let cancelled = false;
+    let count = 0;
+    let openId: string | null = null;
+    const show = (text: string, final: boolean) => {
+      const id = (openId ??= `them-${theirTrack.id}-${count++}`);
+      if (final) openId = null;
+      setCaptions((list) =>
+        list.some((c) => c.id === id)
+          ? list.map((c) => (c.id === id ? { ...c, text, final } : c))
+          : [...list, { id, who: "them", text, final }],
+      );
+    };
+    startCaptions(theirTrack, { onPartial: (text) => show(text, false), onFinal: (text) => show(text, true) })
+      .then((s) => (cancelled ? s() : (stop = s)))
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+      stop?.();
+      setCaptions((list) => list.map((c) => (c.who === "them" && !c.final ? { ...c, final: true } : c)));
+    };
+  }, [theirTrack]);
 
   useEffect(
     () => () => {
