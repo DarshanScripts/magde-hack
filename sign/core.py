@@ -235,7 +235,7 @@ MOUTH_KEYS = (
 SEQ_LEN = 32
 HAND_DIM = 63 + 4 + 2 + 1
 FEAT_DIM = 2 * HAND_DIM + len(MOUTH_KEYS) + 1
-MAX_GAP = 3
+MAX_GAP = 5
 NOSE = 0
 
 

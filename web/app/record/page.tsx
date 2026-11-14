@@ -13,6 +13,11 @@ const NONE_TARGET = 30;
 const EXTRA = ["KOPF", "BAUCH", "FIEBER", "VORMITTAG", "ABEND", "ZEIT", "OKAY", "NICHT", "MOECHTEN",
   "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS", "SIEBEN"];
 const RECORD_ORDER = [...labels.p0, ...EXTRA, labels.none];
+// median length of the first (normal-speed) session per sign, seconds
+const BASE_S: Record<string, number> = {
+  HALLO: 1.7, DANKE: 0.9, TSCHUESS: 1.0, JA: 0.8, NEIN: 0.9, WIEDERHOLEN: 1.2, NAME: 0.7, TERMIN: 1.6,
+  WOLLEN: 0.8, HEUTE: 1.05, MORGEN: 1.2, NACHMITTAG: 1.35, UHR: 1.2, UNTERSUCHUNG: 1.4, SCHMERZ: 2.4,
+};
 const HINTS: Record<string, string> = {
   EINS: "Thumb up (fist, thumb out), palm towards you. Not a thumbs-up gesture: hold at chest, short downward tap.",
   ZWEI: "Thumb + index finger out, palm towards you.",
@@ -55,6 +60,13 @@ export default function RecordPage() {
   const [hasModel, setHasModel] = useState(false);
   const [history, setHistory] = useState<Token[]>([]);
   const [status, setStatus] = useState<SignStatus>({ state: "rest", fps: 0, online: false });
+  const [takeMs, setTakeMs] = useState(0);
+  const signStart = useRef(0);
+  const onStatus = useCallback((s: SignStatus) => {
+    if (s.state === "signing" && !signStart.current) signStart.current = Date.now();
+    if (s.state === "rest") setTimeout(() => (signStart.current = 0), 300);
+    setStatus(s);
+  }, []);
   const [token, setToken] = useState<Token | null>(null);
   const [flash, setFlash] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -88,6 +100,7 @@ export default function RecordPage() {
   }, [refreshCounts]);
 
   const onRecorded = useCallback((lab: string, count: number) => {
+    if (signStart.current) setTakeMs(Date.now() - signStart.current - 150);
     const next = { ...countsRef.current, [lab]: count };
     setCounts(next);
     setFlash(true);
@@ -165,7 +178,7 @@ export default function RecordPage() {
         recordLabel={label}
         signer={signer}
         onToken={onToken}
-        onStatus={setStatus}
+        onStatus={onStatus}
         onRecorded={onRecorded}
       />
 
@@ -214,6 +227,11 @@ export default function RecordPage() {
               <div className="text-2xl font-semibold">{label}</div>
               <div className="text-7xl font-bold tabular-nums">{current}</div>
               <div className="text-sm text-zinc-600">target {targetOf(label)}</div>
+              {takeMs > 0 && (
+                <div className="text-sm text-zinc-700">
+                  last take {(takeMs / 1000).toFixed(2)} s{BASE_S[label] && ` · normal ≈ ${BASE_S[label]} s, fast ≈ ${(BASE_S[label] * 0.65).toFixed(1)} s`}
+                </div>
+              )}
             </div>
             {HINTS[label] && <p className="rounded-lg bg-amber-100 p-3 text-lg text-zinc-900">{HINTS[label]}</p>}
             {REFS[label] && (

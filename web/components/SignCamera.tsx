@@ -195,6 +195,10 @@ export default function SignCamera(props: SignCameraProps) {
             baseOptions: { modelAssetPath: HAND_MODEL, delegate },
             runningMode: "VIDEO",
             numHands: 2,
+            // lower than the 0.5 defaults so fast, slightly blurred hands are not dropped
+            minHandDetectionConfidence: 0.3,
+            minHandPresenceConfidence: 0.3,
+            minTrackingConfidence: 0.3,
           }),
         ),
         withFallback((delegate) =>
