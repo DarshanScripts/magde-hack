@@ -51,10 +51,12 @@ function toBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+export type CaptionState = "connecting" | "live" | "failed";
+
 // Transcribes a (remote) audio track live. Resolves to a stop function.
 export async function startCaptions(
   track: MediaStreamTrack,
-  on: { onPartial(text: string): void; onFinal(text: string): void },
+  on: { onPartial(text: string): void; onFinal(text: string): void; onState?(state: CaptionState): void },
 ): Promise<() => void> {
   const ac = audioContext();
   const step = ac.sampleRate % 16000 === 0 ? ac.sampleRate / 16000 : 1;
@@ -85,6 +87,7 @@ export async function startCaptions(
   };
 
   async function connect() {
+    on.onState?.("connecting");
     try {
       const res = await fetch("/api/scribe-token", { cache: "no-store" });
       if (!res.ok) throw new Error("scribe token request failed");
@@ -103,6 +106,8 @@ export async function startCaptions(
       conn.on(RealtimeEvents.SESSION_STARTED, () => {
         open = true;
         retries = 0;
+        on.onState?.("live");
+        console.info(`captions: live (${sampleRate} Hz)`);
       });
       conn.on(RealtimeEvents.PARTIAL_TRANSCRIPT, (m) => {
         if (m.text.trim()) on.onPartial(m.text.trim());
@@ -123,7 +128,8 @@ export async function startCaptions(
   }
 
   function retry() {
-    if (stopped || retries >= MAX_RETRIES) return;
+    if (stopped) return;
+    if (retries >= MAX_RETRIES) return on.onState?.("failed");
     retryTimer = setTimeout(connect, 500 * 2 ** retries++);
   }
 

@@ -8,7 +8,7 @@ import LevelBars from "@/components/LevelBars";
 import { HandIcon, SendIcon } from "@/components/icons";
 import { createVoice, joinCall, describeCallError } from "@/lib/call";
 import { useI18n } from "@/lib/i18n";
-import { startCaptions } from "@/lib/stt";
+import { startCaptions, type CaptionState } from "@/lib/stt";
 import { IDENTITY, MOCK_CONTACTS, TTS_TRACK_NAME, type Caption } from "@/lib/contract";
 
 type Session = {
@@ -22,6 +22,7 @@ export default function SignerPage() {
   const [captions, setCaptions] = useState<Caption[]>([]);
   const [draft, setDraft] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [captionState, setCaptionState] = useState<CaptionState | null>(null);
   const [theirTrack, setTheirTrack] = useState<MediaStreamTrack | null>(null);
   const [myTrack, setMyTrack] = useState<MediaStreamTrack | null>(null);
   const session = useRef<Session | null>(null);
@@ -104,12 +105,20 @@ export default function SignerPage() {
           : [...list, { id, who: "them", text, final }],
       );
     };
-    startCaptions(theirTrack, { onPartial: (text) => show(text, false), onFinal: (text) => show(text, true) })
+    startCaptions(theirTrack, {
+      onPartial: (text) => show(text, false),
+      onFinal: (text) => show(text, true),
+      onState: (state) => !cancelled && setCaptionState(state),
+    })
       .then((s) => (cancelled ? s() : (stop = s)))
-      .catch((err) => console.error(err));
+      .catch((err) => {
+        console.error("captions:", err);
+        if (!cancelled) setCaptionState("failed");
+      });
     return () => {
       cancelled = true;
       stop?.();
+      setCaptionState(null);
       setCaptions((list) => list.map((c) => (c.who === "them" && !c.final ? { ...c, final: true } : c)));
     };
   }, [theirTrack]);
@@ -175,6 +184,11 @@ export default function SignerPage() {
             <h2 className="text-lg font-medium">{t("conversation")}</h2>
             {connected ? (
               <span className="flex items-center gap-4 text-sm text-muted">
+                {captionState ? (
+                  <span data-captions={captionState} className={captionState === "failed" ? "text-danger" : undefined}>
+                    {t(captionState === "live" ? "captionsLive" : captionState === "failed" ? "captionsFailed" : "captionsConnecting")}
+                  </span>
+                ) : null}
                 <span className="flex items-center gap-2">
                   <span>{t("practice")}</span> <LevelBars track={theirTrack} className="text-call" />
                 </span>
