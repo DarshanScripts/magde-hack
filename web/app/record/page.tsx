@@ -101,7 +101,7 @@ export default function RecordPage() {
   const btn = "rounded-lg px-3 py-2 font-medium";
 
   return (
-    <main className="mx-auto grid w-full max-w-7xl gap-6 p-6 lg:grid-cols-[1fr_380px]">
+    <main className="mx-auto grid min-h-screen w-full max-w-7xl gap-6 bg-white p-6 text-zinc-900 lg:grid-cols-[1fr_380px]">
       <SignCamera
         mode={paused ? "infer" : mode}
         recordLabel={label}
@@ -136,11 +136,11 @@ export default function RecordPage() {
           <>
             <label className="flex flex-col gap-1 text-sm">
               signer
-              <input value={signer} onChange={(e) => setSigner(e.target.value)} className="rounded border px-2 py-1" />
+              <input value={signer} onChange={(e) => setSigner(e.target.value)} className="rounded border bg-white px-2 py-1 text-zinc-900" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               label
-              <select value={label} onChange={(e) => setLabel(e.target.value)} className="rounded border px-2 py-1 text-lg">
+              <select value={label} onChange={(e) => setLabel(e.target.value)} className="rounded border bg-white px-2 py-1 text-lg text-zinc-900">
                 {Object.entries({ p0: labels.p0, none: [labels.none] }).map(([group, list]) => (
                   <optgroup key={group} label={group}>
                     {list.map((l) => (
@@ -181,22 +181,25 @@ export default function RecordPage() {
             </button>
           </>
         ) : (
-          <div className="rounded-xl bg-zinc-100 p-4">
-            <div className="text-sm text-zinc-600">last prediction</div>
-            <div className="flex items-center gap-2 text-5xl font-bold">
+          <div className="rounded-xl bg-zinc-900 p-4 text-white">
+            <div className="text-sm text-zinc-400">last prediction</div>
+            <div
+              className={`flex flex-wrap items-center gap-2 py-2 text-6xl font-bold ${!token ? "text-zinc-500" : token.label === "?" ? "text-amber-400" : "text-green-400"}`}
+            >
               {token?.label ?? "–"}
+              {token && <span className="text-2xl font-medium text-zinc-300">{Math.round(token.conf * 100)}%</span>}
               {token?.question && <span className="rounded bg-fuchsia-600 px-2 text-xl text-white">{token.question === "yn" ? "? ja/nein" : "? W-Frage"}</span>}
               {token?.negation && <span className="rounded bg-red-600 px-2 text-xl text-white">¬ nicht</span>}
             </div>
             {token?.top?.map(([l, p]) => (
-              <div key={l} className="flex justify-between font-mono text-sm">
+              <div key={l} className="flex justify-between font-mono text-base text-zinc-200">
                 <span>{l}</span>
                 <span>{p.toFixed(2)}</span>
               </div>
             ))}
             <div className="mt-3 flex flex-wrap gap-1">
               {history.map((t, i) => (
-                <span key={i} className={`rounded px-2 py-0.5 text-sm ${t.label === "?" ? "bg-zinc-300" : "bg-blue-600 text-white"}`}>
+                <span key={i} className={`rounded px-2 py-0.5 text-base font-semibold ${t.label === "?" ? "bg-amber-400 text-zinc-900" : "bg-blue-500 text-white"}`}>
                   {t.label}
                   {t.question ? "?" : ""}
                   {t.negation ? "¬" : ""}
