@@ -42,7 +42,7 @@ console.error = (...args: unknown[]) => {
   if (typeof args[0] === "string" && args[0].includes("TensorFlow Lite XNNPACK delegate")) return;
   consoleError(...args);
 };
-const BROW_THRESHOLD = 0.4;
+const BROW_THRESHOLD = 0.3;
 const CAMERA_KEY = "signCameraId";
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
