@@ -29,7 +29,7 @@ The other side needs no app and no account. They open a link and tap **Join**.
 ## Features
 
 - Browser-to-browser call, nothing to install
-- 36 signs: greetings, appointments, times, numbers 1–12, symptoms
+- 33 signs: greetings, appointments, times, numbers 1–10, symptoms
 - Continuous signing: a short stop in the air separates two signs
 - Raised brows make a question, a head shake makes a negation
 - Optional "confirm before speaking", or simply type a sentence instead
@@ -76,7 +76,7 @@ sign/   sign recognition service, training script and the trained model
 
 ## Limits
 
-- The model knows 36 signs and was trained on one signer, so it makes mistakes with other people.
+- The model knows 33 signs and was trained on one signer, so it makes mistakes with other people.
 - It recognises single signs, not full DGS grammar.
 - It needs internet: the call, the voice and the sentence model are cloud services.
 
