@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { DrawingUtils, FilesetResolver, HandLandmarker, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { DrawingUtils, FilesetResolver, HandLandmarker, PoseLandmarker, type NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { SIGN_WS_URL, type SignCameraProps } from "@/lib/contract";
 
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.2/wasm";
@@ -11,6 +11,7 @@ const POSE_MODEL = `${MODELS}/pose_landmarker/pose_landmarker_lite/float16/1/pos
 const ARM_CONNECTIONS = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16]].map(([start, end]) => ({ start, end }));
 const ARM_POINTS = [11, 12, 13, 14, 15, 16];
 const MAX_BUFFERED = 64 * 1024;
+const POSE_EVERY = 2;
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 
@@ -134,6 +135,8 @@ export default function SignCamera(props: SignCameraProps) {
       let lastTs = 0;
       let lastT = 0;
       let frames = 0;
+      let frameNo = 0;
+      let poseLm: NormalizedLandmark[] | undefined;
       let fpsStart = performance.now();
 
       const onFrame = () => {
@@ -142,7 +145,7 @@ export default function SignCamera(props: SignCameraProps) {
         const ts = Math.max(now, lastTs + 1);
         lastTs = ts;
         const hr = hand.detectForVideo(video, ts);
-        const pr = pose.detectForVideo(video, ts);
+        if (frameNo++ % POSE_EVERY === 0) poseLm = pose.detectForVideo(video, ts).landmarks[0];
         const w = video.videoWidth;
         const hgt = video.videoHeight;
         if (canvas.width !== w || canvas.height !== hgt) {
@@ -150,10 +153,10 @@ export default function SignCamera(props: SignCameraProps) {
           canvas.height = hgt;
         }
         ctx.clearRect(0, 0, w, hgt);
-        const poseLm = pr.landmarks[0];
-        if (poseLm) {
-          draw.drawConnectors(poseLm, ARM_CONNECTIONS, { color: "#38bdf8", lineWidth: 4 });
-          draw.drawLandmarks(ARM_POINTS.map((i) => poseLm[i]), { color: "#38bdf8", radius: 4 });
+        const arms = poseLm;
+        if (arms) {
+          draw.drawConnectors(arms, ARM_CONNECTIONS, { color: "#38bdf8", lineWidth: 4 });
+          draw.drawLandmarks(ARM_POINTS.map((i) => arms[i]), { color: "#38bdf8", radius: 4 });
         }
         for (const lm of hr.landmarks) {
           draw.drawConnectors(lm, HandLandmarker.HAND_CONNECTIONS, { color: "#22c55e", lineWidth: 3 });
