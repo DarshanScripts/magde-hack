@@ -1,7 +1,9 @@
+import { connection } from "next/server";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 
 // Single-use and valid for 15 minutes, so the browser asks for a new one on every (re)connect.
 export async function GET() {
+  await connection(); // a fresh single-use token per request, never at build time
   const { ELEVEN_LABS_API_KEY } = process.env;
   if (!ELEVEN_LABS_API_KEY) {
     return Response.json({ error: "ElevenLabs is not configured" }, { status: 500 });

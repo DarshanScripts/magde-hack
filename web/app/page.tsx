@@ -16,6 +16,8 @@ import { IDENTITY, MOCK_CONTACTS, TTS_TRACK_NAME, type Caption, type Turn } from
 const UNCERTAIN = "?";
 const SENTENCE_DELAY_MS = 1500;
 const HISTORY_TURNS = 6;
+const PILL =
+  "h-8 shrink-0 cursor-pointer rounded-full px-4 text-sm font-medium transition duration-200 ease-out-soft active:scale-[0.97]";
 const MOCK_LABELS = [...labels.p0, ...labels.p1, UNCERTAIN];
 
 type Session = {
@@ -33,10 +35,14 @@ export default function SignerPage() {
   const [theirTrack, setTheirTrack] = useState<MediaStreamTrack | null>(null);
   const [myTrack, setMyTrack] = useState<MediaStreamTrack | null>(null);
   const [chips, setChips] = useState<string[]>([]);
+  const [confirm, setConfirm] = useState(false);
+  const [preview, setPreview] = useState<{ id: string; text: string } | null>(null);
   const session = useRef<Session | null>(null);
   const nextId = useRef(0);
   const pending = useRef<{ chips: string[]; timer?: ReturnType<typeof setTimeout> }>({ chips: [] });
   const history = useRef<Turn[]>([]);
+  const confirmRef = useRef(false);
+  const previewRef = useRef<{ id: string; text: string } | null>(null);
   const { t } = useI18n();
   const profileName = useProfileName();
   const mock = useMockMode();
@@ -55,10 +61,22 @@ export default function SignerPage() {
     if (session.current?.voice) updateChips([...pending.current.chips, label]);
   }
 
+  async function speakCaption(id: string, text: string) {
+    try {
+      await session.current?.voice?.speak(text);
+      setCaptions((list) => list.map((c) => (c.id === id ? { ...c, final: true } : c)));
+    } catch (err) {
+      console.error(err);
+      setCaptions((list) => list.filter((c) => c.id !== id));
+      setNotice(t("ttsFailed"));
+    }
+  }
+
   // Recognized signs -> one German sentence -> spoken into the call.
   async function sendChips() {
     const gloss = pending.current.chips.filter((label) => label !== UNCERTAIN);
     updateChips([]);
+    discardPreview();
     if (!gloss.length || !session.current?.voice) return;
     const id = `me-${nextId.current++}`;
     setCaptions((list) => [...list, { id, who: "me", text: "…", final: false, gloss }]);
@@ -71,7 +89,8 @@ export default function SignerPage() {
       if (!res.ok) throw new Error("sentence request failed");
       const { text } = (await res.json()) as { text: string };
       setCaptions((list) => list.map((c) => (c.id === id ? { ...c, text } : c)));
-      await speakCaption(id, text);
+      if (confirmRef.current) showPreview({ id, text });
+      else await speakCaption(id, text);
     } catch (err) {
       console.error(err);
       setCaptions((list) => list.filter((c) => c.id !== id));
@@ -79,9 +98,34 @@ export default function SignerPage() {
     }
   }
 
+  // Confirm mode: the sentence waits as a preview until it is confirmed or discarded.
+  function showPreview(next: { id: string; text: string } | null) {
+    previewRef.current = next;
+    setPreview(next);
+  }
+
+  function discardPreview() {
+    const id = previewRef.current?.id;
+    if (!id) return;
+    showPreview(null);
+    setCaptions((list) => list.filter((c) => c.id !== id));
+  }
+
+  function speakPreview() {
+    const current = previewRef.current;
+    if (!current) return;
+    showPreview(null);
+    void speakCaption(current.id, current.text);
+  }
+
   const onKey = useEffectEvent((e: KeyboardEvent) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || !pending.current.chips.length) return;
-    if (e.key === "Enter") void sendChips();
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (!pending.current.chips.length) {
+      if (!preview) return;
+      if (e.key === "Enter") speakPreview();
+      else if (e.key === "Escape") discardPreview();
+      else return;
+    } else if (e.key === "Enter") void sendChips();
     else if (e.key === "Backspace") updateChips(pending.current.chips.slice(0, -1));
     else if (e.key === "Escape") updateChips([]);
     else return;
@@ -99,6 +143,7 @@ export default function SignerPage() {
     clearTimeout(pending.current.timer);
     pending.current = { chips: [] };
     setChips([]);
+    discardPreview();
     setPhase("idle");
     setTheirTrack(null);
     setMyTrack(null);
@@ -147,17 +192,6 @@ export default function SignerPage() {
     setDraft("");
     setCaptions((list) => [...list, { id, who: "me", text, final: false }]);
     await speakCaption(id, text);
-  }
-
-  async function speakCaption(id: string, text: string) {
-    try {
-      await session.current?.voice?.speak(text);
-      setCaptions((list) => list.map((c) => (c.id === id ? { ...c, final: true } : c)));
-    } catch (err) {
-      console.error(err);
-      setCaptions((list) => list.filter((c) => c.id !== id));
-      setNotice(t("ttsFailed"));
-    }
   }
 
   // The practice's speech becomes "them" captions: one bubble grows with the partials, then turns final.
@@ -282,12 +316,36 @@ export default function SignerPage() {
                 </span>
                 <span className="hidden shrink-0 text-xs text-faint xl:block">{t("chipKeys")}</span>
               </>
+            ) : preview ? (
+              <>
+                <span className="h-px flex-1 bg-line" />
+                <span className="hidden text-xs text-faint xl:block">{t("confirmKeys")}</span>
+                <button type="button" onClick={discardPreview} className={`${PILL} border border-line text-muted hover:text-ink`}>
+                  <span>{t("discard")}</span>
+                </button>
+                <button type="button" onClick={speakPreview} className={`${PILL} bg-accent text-white hover:brightness-110`}>
+                  <span>{t("say")}</span>
+                </button>
+              </>
             ) : (
               <>
                 <span className="h-px flex-1 bg-line" />
                 <span className="font-mono text-xs text-faint">{t("noneYet")}</span>
               </>
             )}
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={confirm}
+                onChange={(e) => {
+                  confirmRef.current = e.target.checked;
+                  setConfirm(e.target.checked);
+                  if (!e.target.checked) discardPreview();
+                }}
+                className="size-4 accent-accent"
+              />
+              <span>{t("confirmMode")}</span>
+            </label>
           </div>
         </section>
 
@@ -313,6 +371,7 @@ export default function SignerPage() {
 
           <Captions
             captions={captions}
+            awaitingId={preview?.id}
             empty={
               <p className="max-w-xs text-base text-muted">
                 {connected

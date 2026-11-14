@@ -4,7 +4,15 @@ import { useEffect, useRef } from "react";
 import type { Caption } from "@/lib/contract";
 import { useI18n } from "@/lib/i18n";
 
-export default function Captions({ captions, empty }: { captions: Caption[]; empty: React.ReactNode }) {
+export default function Captions({
+  captions,
+  empty,
+  awaitingId,
+}: {
+  captions: Caption[];
+  empty: React.ReactNode;
+  awaitingId?: string;
+}) {
   const end = useRef<HTMLDivElement>(null);
   const { t } = useI18n();
 
@@ -37,7 +45,7 @@ export default function Captions({ captions, empty }: { captions: Caption[]; emp
               <span className="px-2 font-mono text-xs tracking-wide text-muted">{c.gloss.join(" · ")}</span>
             ) : null}
             {c.who === "me" && !c.final ? (
-              <span className="px-2 text-xs text-muted">{t("speaking")}</span>
+              <span className="px-2 text-xs text-muted">{t(c.id === awaitingId ? "awaitingConfirm" : "speaking")}</span>
             ) : null}
           </li>
         ))}
