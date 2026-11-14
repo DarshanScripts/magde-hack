@@ -1,4 +1,4 @@
-import { AudioPresets, DisconnectReason, Room, RoomEvent, Track } from "livekit-client";
+import { AudioPresets, ConnectionState, DisconnectReason, Room, RoomEvent, Track } from "livekit-client";
 import { IDENTITY, TTS_TRACK_NAME } from "./contract";
 import type { Translate } from "./i18n";
 
@@ -64,6 +64,8 @@ export async function joinCall(
   const peer = identity === IDENTITY.signer ? IDENTITY.callee : IDENTITY.signer;
   const room = new Room({ adaptiveStream: true, dynacast: true });
   const players = new Set<HTMLMediaElement>();
+  let peerSeen = false;
+  const peerHere = () => [...room.remoteParticipants.values()].some((p) => p.identity === peer);
 
   room
     .on(RoomEvent.TrackSubscribed, (track) => {
@@ -79,10 +81,26 @@ export async function joinCall(
       track.detach().forEach((el) => el.remove());
     })
     .on(RoomEvent.ParticipantConnected, (p) => {
-      if (p.identity === peer) on.onPeer("joined");
+      if (p.identity === peer) {
+        peerSeen = true;
+        on.onPeer("joined");
+      }
     })
     .on(RoomEvent.ParticipantDisconnected, (p) => {
-      if (p.identity === peer) on.onPeer("left");
+      // A reconnect drops and re-adds everyone; the peer has only left if it is still gone afterwards.
+      // LiveKit drops everyone first and only then switches to "reconnecting", so decide one tick later.
+      if (p.identity !== peer) return;
+      setTimeout(() => {
+        if (room.state !== ConnectionState.Connected || peerHere()) return;
+        peerSeen = false;
+        on.onPeer("left");
+      });
+    })
+    .on(RoomEvent.Reconnected, () => {
+      const here = peerHere();
+      if (here) on.onPeer("joined");
+      else if (peerSeen) on.onPeer("left");
+      peerSeen = here;
     })
     .on(RoomEvent.Disconnected, (reason) => {
       players.forEach((el) => el.remove());
@@ -93,7 +111,10 @@ export async function joinCall(
   await room.connect(url, token);
   await room.startAudio().catch(() => {});
   for (const p of room.remoteParticipants.values()) {
-    if (p.identity === peer) on.onPeer("joined");
+    if (p.identity === peer) {
+      peerSeen = true;
+      on.onPeer("joined");
+    }
   }
 
   return { room, leave: () => room.disconnect() };

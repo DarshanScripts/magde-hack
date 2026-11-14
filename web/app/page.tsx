@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import Captions from "@/components/Captions";
 import DialBar, { type CallPhase } from "@/components/DialBar";
@@ -11,19 +12,23 @@ import { useI18n } from "@/lib/i18n";
 import { startCaptions, type CaptionState } from "@/lib/stt";
 import { setProfileName, useMockMode, useProfileName } from "@/lib/profile";
 import labels from "@/lib/labels.json";
-import { IDENTITY, MOCK_CONTACTS, TTS_TRACK_NAME, type Caption, type Token, type Turn } from "@/lib/contract";
+import { IDENTITY, MOCK_CONTACTS, TTS_TRACK_NAME, type Caption, type SignStatus, type Token, type Turn } from "@/lib/contract";
+
+// Browser-only (webcam, MediaPipe, WebSocket). Mounted only during a call, so hanging up releases the camera.
+const SignCamera = dynamic(() => import("@/components/SignCamera"), {
+  ssr: false,
+});
 
 const UNCERTAIN = "?";
+const SIGN_OFFLINE: SignStatus = { state: "rest", fps: 0, online: false };
 const SENTENCE_DELAY_MS = 1500;
 const HISTORY_TURNS = 6;
-const PILL =
-  "h-8 shrink-0 cursor-pointer rounded-full px-4 text-sm font-medium transition duration-200 ease-out-soft active:scale-[0.97]";
+const PILL = "h-8 shrink-0 cursor-pointer rounded-full px-4 text-sm font-medium transition duration-200 ease-out-soft active:scale-[0.97]";
 const MOCK_LABELS = [...labels.p0, ...labels.p1, UNCERTAIN];
-const MOCK_FLAGS: { key: "flagYesNo" | "flagWh" | "flagNegation"; question?: Token["question"] }[] = [
-  { key: "flagYesNo", question: "yn" },
-  { key: "flagWh", question: "wh" },
-  { key: "flagNegation" },
-];
+const MOCK_FLAGS: {
+  key: "flagYesNo" | "flagWh" | "flagNegation";
+  question?: Token["question"];
+}[] = [{ key: "flagYesNo", question: "yn" }, { key: "flagWh", question: "wh" }, { key: "flagNegation" }];
 
 type Session = {
   leave(): Promise<void>;
@@ -41,11 +46,15 @@ export default function SignerPage() {
   const [myTrack, setMyTrack] = useState<MediaStreamTrack | null>(null);
   const [chips, setChips] = useState<Token[]>([]);
   const [mockFlags, setMockFlags] = useState<Pick<Token, "question" | "negation">>({});
+  const [signStatus, setSignStatus] = useState<SignStatus>(SIGN_OFFLINE);
   const [confirm, setConfirm] = useState(false);
   const [preview, setPreview] = useState<{ id: string; text: string } | null>(null);
   const session = useRef<Session | null>(null);
   const nextId = useRef(0);
-  const pending = useRef<{ chips: Token[]; timer?: ReturnType<typeof setTimeout> }>({ chips: [] });
+  const pending = useRef<{
+    chips: Token[];
+    timer?: ReturnType<typeof setTimeout>;
+  }>({ chips: [] });
   const history = useRef<Turn[]>([]);
   const confirmRef = useRef(false);
   const previewRef = useRef<{ id: string; text: string } | null>(null);
@@ -54,12 +63,18 @@ export default function SignerPage() {
   const mock = useMockMode();
 
   useEffect(() => {
-    history.current = captions.filter((c) => c.final || c.who === "them").slice(-HISTORY_TURNS).map(({ who, text }) => ({ who, text }));
+    history.current = captions
+      .filter((c) => c.final || c.who === "them")
+      .slice(-HISTORY_TURNS)
+      .map(({ who, text }) => ({ who, text }));
   }, [captions]);
 
   function updateChips(next: Token[]) {
     clearTimeout(pending.current.timer);
-    pending.current = { chips: next, timer: next.length ? setTimeout(sendChips, SENTENCE_DELAY_MS) : undefined };
+    pending.current = {
+      chips: next,
+      timer: next.length ? setTimeout(sendChips, SENTENCE_DELAY_MS) : undefined,
+    };
     setChips(next);
   }
 
@@ -95,7 +110,13 @@ export default function SignerPage() {
       const res = await fetch("/api/sentence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tokens: gloss, history: history.current, profile: { name: profileName }, question, negation }),
+        body: JSON.stringify({
+          tokens: gloss,
+          history: history.current,
+          profile: { name: profileName },
+          question,
+          negation,
+        }),
       });
       if (!res.ok) throw new Error("sentence request failed");
       const { text } = (await res.json()) as { text: string };
@@ -154,6 +175,8 @@ export default function SignerPage() {
     clearTimeout(pending.current.timer);
     pending.current = { chips: [] };
     setChips([]);
+    setMockFlags({});
+    setSignStatus(SIGN_OFFLINE);
     discardPreview();
     setPhase("idle");
     setTheirTrack(null);
@@ -187,9 +210,7 @@ export default function SignerPage() {
       const voice = await createVoice(call.room);
       if (!session.current) return;
       session.current.voice = voice;
-      setMyTrack(
-        call.room.localParticipant.getTrackPublicationByName(TTS_TRACK_NAME)?.track?.mediaStreamTrack ?? null,
-      );
+      setMyTrack(call.room.localParticipant.getTrackPublicationByName(TTS_TRACK_NAME)?.track?.mediaStreamTrack ?? null);
       setPhase((p) => (p === "connecting" ? "ringing" : p));
       if (!(await soundOutputWorks()) && session.current) setNotice(t("noSoundOutput"));
     } catch (err) {
@@ -217,9 +238,7 @@ export default function SignerPage() {
       const id = (openId ??= `them-${theirTrack.id}-${count++}`);
       if (final) openId = null;
       setCaptions((list) =>
-        list.some((c) => c.id === id)
-          ? list.map((c) => (c.id === id ? { ...c, text, final } : c))
-          : [...list, { id, who: "them", text, final }],
+        list.some((c) => c.id === id) ? list.map((c) => (c.id === id ? { ...c, text, final } : c)) : [...list, { id, who: "them", text, final }],
       );
     };
     startCaptions(theirTrack, {
@@ -249,6 +268,8 @@ export default function SignerPage() {
   );
 
   const connected = phase === "connected";
+  // ?mock=1 keeps the sign buttons as a fallback; otherwise the camera runs for the length of the call.
+  const camera = !mock && phase !== "idle";
   const practice = MOCK_CONTACTS[contact].name;
 
   return (
@@ -284,54 +305,78 @@ export default function SignerPage() {
 
       <main className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[55fr_45fr]">
         <section className="flex min-h-0 flex-col rounded-[28px] border border-line bg-surface p-3 shadow-card">
-          <div className="dot-grid relative flex min-h-48 flex-1 flex-col items-center justify-center gap-3 rounded-[20px] bg-sunken/60 text-center">
-            <span className="absolute top-4 left-4 flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-sm text-muted shadow-card">
-              <span className="size-2 rounded-full bg-faint" />
-              <span>{t("cameraOff")}</span>
-            </span>
-            <span className="flex size-16 items-center justify-center rounded-full bg-surface text-muted shadow-card">
-              <HandIcon width={28} height={28} />
-            </span>
-            <p className="text-lg font-medium">{t("signCamera")}</p>
-            <p className="max-w-xs text-sm text-muted">{t(mock ? "mockHint" : "cameraHint")}</p>
-            {mock ? (
-              <div className="flex max-w-xl flex-wrap justify-center gap-1.5 px-4 pt-2">
-                {MOCK_LABELS.map((label) => (
-                  <button
-                    key={label}
-                    type="button"
-                    disabled={!connected}
-                    onClick={() => addToken({ label, conf: 1, t: Date.now(), ...mockFlags })}
-                    className="h-9 cursor-pointer rounded-full border border-line bg-surface px-3 font-mono text-xs tracking-wide shadow-card transition duration-200 ease-out-soft hover:border-accent hover:text-accent active:scale-[0.96] disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-line"
-                  >
-                    {label}
-                  </button>
-                ))}
-                <span className="basis-full" />
-                {MOCK_FLAGS.map((flag) => {
-                  const on = flag.question ? mockFlags.question === flag.question : !!mockFlags.negation;
-                  return (
+          {camera ? (
+            <div className="relative flex min-h-48 flex-1 items-center justify-center overflow-hidden rounded-[20px] bg-sunken/60">
+              <div className="aspect-[4/3] h-full max-w-full">
+                <SignCamera mode="infer" onToken={addToken} onStatus={setSignStatus} />
+              </div>
+              <span className="absolute bottom-4 left-4 flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-sm text-muted shadow-card">
+                <span className={`size-2 rounded-full ${!signStatus.online ? "bg-danger" : signStatus.state === "signing" ? "bg-accent" : "bg-call"}`} />
+                <span>{t(!signStatus.online ? "signOffline" : signStatus.state === "signing" ? "signSigning" : "signReady")}</span>
+              </span>
+            </div>
+          ) : (
+            <div className="dot-grid relative flex min-h-48 flex-1 flex-col items-center justify-center gap-3 rounded-[20px] bg-sunken/60 text-center">
+              <span className="absolute top-4 left-4 flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-sm text-muted shadow-card">
+                <span className="size-2 rounded-full bg-faint" />
+                <span>{t("cameraOff")}</span>
+              </span>
+              <span className="flex size-16 items-center justify-center rounded-full bg-surface text-muted shadow-card">
+                <HandIcon width={28} height={28} />
+              </span>
+              <p className="text-lg font-medium">{t("signCamera")}</p>
+              <p className="max-w-xs text-sm text-muted">{t(mock ? "mockHint" : "cameraHint")}</p>
+              {mock ? (
+                <div className="flex max-w-xl flex-wrap justify-center gap-1.5 px-4 pt-2">
+                  {MOCK_LABELS.map((label) => (
                     <button
-                      key={flag.key}
+                      key={label}
                       type="button"
                       disabled={!connected}
-                      aria-pressed={on}
                       onClick={() =>
-                        setMockFlags((f) =>
-                          flag.question ? { ...f, question: on ? undefined : flag.question } : { ...f, negation: on ? undefined : true },
-                        )
+                        addToken({
+                          label,
+                          conf: 1,
+                          t: Date.now(),
+                          ...mockFlags,
+                        })
                       }
-                      className={`h-9 cursor-pointer rounded-full border px-3 text-xs shadow-card transition duration-200 ease-out-soft active:scale-[0.96] disabled:cursor-not-allowed disabled:text-faint ${
-                        on ? "border-accent bg-accent text-white" : "border-line bg-surface text-muted hover:border-accent hover:text-accent"
-                      }`}
+                      className="h-9 cursor-pointer rounded-full border border-line bg-surface px-3 font-mono text-xs tracking-wide shadow-card transition duration-200 ease-out-soft hover:border-accent hover:text-accent active:scale-[0.96] disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-line"
                     >
-                      <span>{t(flag.key)}</span>
+                      {label}
                     </button>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
+                  ))}
+                  <span className="basis-full" />
+                  {MOCK_FLAGS.map((flag) => {
+                    const on = flag.question ? mockFlags.question === flag.question : !!mockFlags.negation;
+                    return (
+                      <button
+                        key={flag.key}
+                        type="button"
+                        disabled={!connected}
+                        aria-pressed={on}
+                        onClick={() =>
+                          setMockFlags((f) =>
+                            flag.question
+                              ? {
+                                  ...f,
+                                  question: on ? undefined : flag.question,
+                                }
+                              : { ...f, negation: on ? undefined : true },
+                          )
+                        }
+                        className={`h-9 cursor-pointer rounded-full border px-3 text-xs shadow-card transition duration-200 ease-out-soft active:scale-[0.96] disabled:cursor-not-allowed disabled:text-faint ${
+                          on ? "border-accent bg-accent text-white" : "border-line bg-surface text-muted hover:border-accent hover:text-accent"
+                        }`}
+                      >
+                        <span>{t(flag.key)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          )}
           <div className="flex min-h-16 items-center gap-3 px-3 pt-3 pb-1">
             <span className="shrink-0 text-sm text-muted">{t("recognizedSigns")}</span>
             {chips.length ? (
@@ -418,11 +463,7 @@ export default function SignerPage() {
             awaitingId={preview?.id}
             empty={
               <p className="max-w-xs text-base text-muted">
-                {connected
-                  ? t("emptyConnected")
-                  : phase === "idle"
-                    ? t("emptyIdle")
-                    : t("emptyCalling", { name: practice })}
+                {connected ? t("emptyConnected") : phase === "idle" ? t("emptyIdle") : t("emptyCalling", { name: practice })}
               </p>
             }
           />

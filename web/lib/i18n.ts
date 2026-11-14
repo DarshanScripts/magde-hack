@@ -8,7 +8,7 @@ const de = {
   practicePage: "Praxis-Seite",
   cameraOff: "Kamera aus",
   signCamera: "Gebärdenkamera",
-  cameraHint: "Hier erscheint Ihr Kamerabild, sobald die Gebärdenerkennung angeschlossen ist.",
+  cameraHint: "Ihre Kamera startet mit dem Anruf. Gebärden werden dann erkannt und gesprochen.",
   recognizedSigns: "Erkannte Gebärden",
   noneYet: "noch keine",
   conversation: "Gespräch",
@@ -33,13 +33,15 @@ const de = {
   ringing: "Ruft an",
   practiceHungUp: "Die Praxis hat aufgelegt.",
   connectionLost: "Die Verbindung wurde getrennt.",
+  signOffline: "Gebärdendienst nicht erreichbar",
+  signReady: "Bereit",
+  signSigning: "Gebärde erkannt …",
   flagYesNo: "Ja/Nein-Frage (Brauen hoch)",
   flagWh: "W-Frage (Brauen runter)",
   flagNegation: "Verneinung (Kopfschütteln)",
   noSoundOutput:
     "Die Tonausgabe dieses Computers scheint nicht zu funktionieren. Ihre Stimme wird trotzdem übertragen. Wenn Sie die Praxis nicht hören oder keine Untertitel erscheinen, wählen Sie in Windows ein anderes Ausgabegerät und rufen Sie neu an.",
-  duplicateSigner:
-    "Ein anderes Gerät hat diese Anrufer-Seite geöffnet und den Anruf übernommen. Das zweite Gerät muss /callee öffnen.",
+  duplicateSigner: "Ein anderes Gerät hat diese Anrufer-Seite geöffnet und den Anruf übernommen. Das zweite Gerät muss /callee öffnen.",
   duplicateCallee: "Ein anderes Gerät hat die Praxis-Seite geöffnet und den Anruf übernommen.",
   ttsFailed: "Die Sprachausgabe ist fehlgeschlagen.",
   sentenceFailed: "Der Satz konnte nicht gebildet werden.",
@@ -71,7 +73,7 @@ const en: typeof de = {
   practicePage: "Practice page",
   cameraOff: "Camera off",
   signCamera: "Sign camera",
-  cameraHint: "Your camera image appears here once sign recognition is connected.",
+  cameraHint: "Your camera starts with the call. Signs are then recognized and spoken.",
   recognizedSigns: "Recognized signs",
   noneYet: "none yet",
   conversation: "Conversation",
@@ -96,13 +98,15 @@ const en: typeof de = {
   ringing: "Ringing",
   practiceHungUp: "The practice hung up.",
   connectionLost: "The connection was lost.",
+  signOffline: "Sign service offline",
+  signReady: "Ready",
+  signSigning: "Signing …",
   flagYesNo: "Yes/no question (brows up)",
   flagWh: "W-question (brows down)",
   flagNegation: "Negation (head shake)",
   noSoundOutput:
     "This computer's sound output does not seem to be working. Your voice is still sent. If you cannot hear the practice or get no captions, pick another output device in Windows and call again.",
-  duplicateSigner:
-    "Another device opened this caller page and took over the call. The second device has to open /callee instead.",
+  duplicateSigner: "Another device opened this caller page and took over the call. The second device has to open /callee instead.",
   duplicateCallee: "Another device opened the practice page and took over the call.",
   ttsFailed: "Text-to-speech failed.",
   sentenceFailed: "The sentence could not be created.",
@@ -159,7 +163,6 @@ export function setLang(lang: Lang) {
 
 export function useI18n(): { lang: Lang; t: Translate } {
   const lang = useSyncExternalStore(subscribe, currentLang, () => "de" as Lang);
-  const t: Translate = (key, vars) =>
-    dict[lang][key].replace(/\{(\w+)\}/g, (_, name: string) => vars?.[name] ?? "");
+  const t: Translate = (key, vars) => dict[lang][key].replace(/\{(\w+)\}/g, (_, name: string) => vars?.[name] ?? "");
   return { lang, t };
 }
