@@ -1,5 +1,6 @@
-import { AudioPresets, Room, RoomEvent, Track } from "livekit-client";
+import { AudioPresets, DisconnectReason, Room, RoomEvent, Track } from "livekit-client";
 import { IDENTITY, TTS_TRACK_NAME } from "./contract";
+import type { Translate } from "./i18n";
 
 type Identity = (typeof IDENTITY)[keyof typeof IDENTITY];
 
@@ -13,15 +14,14 @@ export function audioContext(): AudioContext {
 }
 
 // Turns a failed join into a sentence the person on the page can act on.
-export function describeCallError(err: unknown): string {
+export function describeCallError(err: unknown, t: Translate): string {
   if (typeof window !== "undefined" && !window.isSecureContext) {
-    return "Diese Adresse ist nicht sicher (kein HTTPS). Bitte die https-Adresse von ngrok oder localhost öffnen.";
+    return t("notSecure");
   }
   const name = err instanceof Error ? err.name : "";
-  if (name === "NotAllowedError") return "Bitte erlauben Sie den Zugriff auf das Mikrofon.";
-  if (name === "NotFoundError" || name === "NotReadableError") return "Es wurde kein nutzbares Mikrofon gefunden.";
-  const detail = err instanceof Error ? err.message : String(err);
-  return `Verbindung fehlgeschlagen: ${detail}`;
+  if (name === "NotAllowedError") return t("micDenied");
+  if (name === "NotFoundError" || name === "NotReadableError") return t("micMissing");
+  return t("connectFailed", { detail: err instanceof Error ? err.message : String(err) });
 }
 
 export async function joinCall(
@@ -29,7 +29,8 @@ export async function joinCall(
   on: {
     onRemoteAudio(track: MediaStreamTrack): void;
     onPeer(state: "joined" | "left"): void;
-    onEnd(): void;
+    // "duplicate": another device joined with the same identity and LiveKit dropped this one.
+    onEnd(reason: "duplicate" | "lost"): void;
   },
 ): Promise<{ room: Room; leave(): Promise<void> }> {
   audioContext();
@@ -60,10 +61,10 @@ export async function joinCall(
     .on(RoomEvent.ParticipantDisconnected, (p) => {
       if (p.identity === peer) on.onPeer("left");
     })
-    .on(RoomEvent.Disconnected, () => {
+    .on(RoomEvent.Disconnected, (reason) => {
       players.forEach((el) => el.remove());
       players.clear();
-      on.onEnd();
+      on.onEnd(reason === DisconnectReason.DUPLICATE_IDENTITY ? "duplicate" : "lost");
     });
 
   await room.connect(url, token);

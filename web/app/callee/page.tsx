@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import CallTimer from "@/components/CallTimer";
+import LangToggle from "@/components/LangToggle";
 import LevelBars from "@/components/LevelBars";
 import LatticeLoader from "@/components/reactbits/LatticeLoader";
 import { HandIcon, HangUpIcon, MicIcon, MicOffIcon, PhoneIcon } from "@/components/icons";
 import { joinCall, describeCallError } from "@/lib/call";
 import { IDENTITY } from "@/lib/contract";
+import { useI18n } from "@/lib/i18n";
 
 type Phase = "idle" | "connecting" | "waiting" | "connected";
 type Call = Awaited<ReturnType<typeof joinCall>>;
@@ -17,6 +19,7 @@ export default function CalleePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [voiceTrack, setVoiceTrack] = useState<MediaStreamTrack | null>(null);
   const call = useRef<Call | null>(null);
+  const { t } = useI18n();
 
   function reset(message: string | null) {
     call.current = null;
@@ -42,8 +45,8 @@ export default function CalleePage() {
           setPhase(state === "joined" ? "connected" : "waiting");
           if (state === "left") setVoiceTrack(null);
         },
-        onEnd: () => {
-          if (call.current) reset("Die Verbindung wurde getrennt.");
+        onEnd: (reason) => {
+          if (call.current) reset(t(reason === "duplicate" ? "duplicateCallee" : "connectionLost"));
         },
       });
       call.current = joined;
@@ -51,7 +54,7 @@ export default function CalleePage() {
       await joined.room.localParticipant.setMicrophoneEnabled(true);
     } catch (err) {
       console.error(err);
-      leave(describeCallError(err));
+      leave(describeCallError(err, t));
     }
   }
 
@@ -68,11 +71,14 @@ export default function CalleePage() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-      <header className="flex items-center gap-2.5 self-start">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-ink text-paper">
-          <HandIcon width={18} height={18} />
-        </span>
-        <span className="text-lg font-semibold tracking-tight">DGS Call</span>
+      <header className="flex w-full items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-9 items-center justify-center rounded-xl bg-ink text-paper">
+            <HandIcon width={18} height={18} />
+          </span>
+          <span className="text-lg font-semibold tracking-tight">DGS Call</span>
+        </div>
+        <LangToggle />
       </header>
 
       <main className="flex flex-1 flex-col items-center justify-center gap-8 py-10 text-center">
@@ -94,24 +100,23 @@ export default function CalleePage() {
 
         <div className="flex flex-col items-center gap-2">
           <h1 className="text-[28px] leading-tight font-semibold tracking-tight">
-            {connected ? "Verbunden" : phase === "waiting" ? "Warte auf Anruf …" : "Anruf annehmen"}
+            {t(connected ? "connected" : phase === "waiting" ? "calleeWaitingTitle" : "calleeIdleTitle")}
           </h1>
           <div className="flex h-6 items-center text-base text-muted">
             {connected ? (
               <CallTimer key="timer" />
             ) : phase === "connecting" ? (
-              <LatticeLoader key="loader" label="Verbinde" pattern="ripple" cellSize={3} gap={2} showTimer={false} color="var(--color-accent)" />
+              <LatticeLoader key="loader" label={t("connecting")} pattern="ripple" cellSize={3} gap={2} showTimer={false} color="var(--color-accent)" />
             ) : phase === "waiting" ? (
-              <span key="ready">Sie sind bereit. Das Mikrofon ist an.</span>
+              <span key="ready">{t("calleeReady")}</span>
             ) : (
-              <span key="idle">Praxis-Seite für eingehende Anrufe</span>
+              <span key="idle">{t("calleeIdleSub")}</span>
             )}
           </div>
         </div>
 
         <p className="max-w-xs rounded-3xl border border-line bg-surface px-5 py-4 text-left text-[15px] leading-relaxed text-muted shadow-card">
-          Die anrufende Person gebärdet in Deutscher Gebärdensprache. Sie hören ihre Sätze als Computerstimme. Sprechen
-          Sie ganz normal, Ihre Antwort wird als Text angezeigt.
+          {t("calleeInfo")}
         </p>
 
         {notice ? (
@@ -133,7 +138,7 @@ export default function CalleePage() {
               }`}
             >
               {muted ? <MicOffIcon /> : <MicIcon />}
-              <span>{muted ? "Stumm" : "Mikrofon an"}</span>
+              <span>{t(muted ? "muted" : "micOn")}</span>
             </button>
             <button
               type="button"
@@ -141,7 +146,7 @@ export default function CalleePage() {
               className="flex h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-danger text-base font-medium text-white shadow-float transition duration-200 ease-out-soft active:scale-[0.97]"
             >
               <HangUpIcon />
-              <span>Auflegen</span>
+              <span>{t("hangUp")}</span>
             </button>
           </>
         ) : (
@@ -151,7 +156,7 @@ export default function CalleePage() {
             className="flex h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-call text-lg font-medium text-white shadow-float transition duration-200 ease-out-soft hover:brightness-105 active:scale-[0.97]"
           >
             <PhoneIcon />
-            <span>Beitreten</span>
+            <span>{t("join")}</span>
           </button>
         )}
       </footer>

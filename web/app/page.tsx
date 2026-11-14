@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import Captions from "@/components/Captions";
 import DialBar, { type CallPhase } from "@/components/DialBar";
+import LangToggle from "@/components/LangToggle";
 import LevelBars from "@/components/LevelBars";
 import { HandIcon, SendIcon } from "@/components/icons";
 import { createVoice, joinCall, describeCallError } from "@/lib/call";
+import { useI18n } from "@/lib/i18n";
 import { IDENTITY, MOCK_CONTACTS, TTS_TRACK_NAME, type Caption } from "@/lib/contract";
 
 type Session = {
@@ -23,6 +25,7 @@ export default function SignerPage() {
   const [myTrack, setMyTrack] = useState<MediaStreamTrack | null>(null);
   const session = useRef<Session | null>(null);
   const nextId = useRef(0);
+  const { t } = useI18n();
 
   function reset(message: string | null) {
     session.current = null;
@@ -48,10 +51,10 @@ export default function SignerPage() {
         onRemoteAudio: setTheirTrack,
         onPeer: (state) => {
           if (state === "joined") setPhase("connected");
-          else hangUp("Die Praxis hat aufgelegt.");
+          else hangUp(t("practiceHungUp"));
         },
-        onEnd: () => {
-          if (session.current) reset("Die Verbindung wurde getrennt.");
+        onEnd: (reason) => {
+          if (session.current) reset(t(reason === "duplicate" ? "duplicateSigner" : "connectionLost"));
         },
       });
       session.current = { leave: call.leave };
@@ -64,7 +67,7 @@ export default function SignerPage() {
       setPhase((p) => (p === "connecting" ? "ringing" : p));
     } catch (err) {
       console.error(err);
-      hangUp(describeCallError(err));
+      hangUp(describeCallError(err, t));
     }
   }
 
@@ -80,7 +83,7 @@ export default function SignerPage() {
     } catch (err) {
       console.error(err);
       setCaptions((list) => list.filter((c) => c.id !== id));
-      setNotice("Die Sprachausgabe ist fehlgeschlagen.");
+      setNotice(t("ttsFailed"));
     }
   }
 
@@ -104,7 +107,18 @@ export default function SignerPage() {
           </span>
           <span className="text-lg font-semibold tracking-tight">DGS Call</span>
         </div>
-        <p className="hidden text-sm text-muted sm:block">Gebärden werden zur Stimme. Sprache wird zu Text.</p>
+        <p className="hidden text-sm text-muted lg:block">{t("tagline")}</p>
+        <div className="flex items-center gap-3">
+          <a
+            href="/callee"
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm text-muted underline decoration-line underline-offset-4 transition-colors duration-200 hover:text-ink"
+          >
+            {t("practicePage")}
+          </a>
+          <LangToggle />
+        </div>
       </header>
 
       <main className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[55fr_45fr]">
@@ -112,33 +126,33 @@ export default function SignerPage() {
           <div className="dot-grid relative flex min-h-48 flex-1 flex-col items-center justify-center gap-3 rounded-[20px] bg-sunken/60 text-center">
             <span className="absolute top-4 left-4 flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-sm text-muted shadow-card">
               <span className="size-2 rounded-full bg-faint" />
-              Kamera aus
+              <span>{t("cameraOff")}</span>
             </span>
             <span className="flex size-16 items-center justify-center rounded-full bg-surface text-muted shadow-card">
               <HandIcon width={28} height={28} />
             </span>
-            <p className="text-lg font-medium">Gebärdenkamera</p>
+            <p className="text-lg font-medium">{t("signCamera")}</p>
             <p className="max-w-xs text-sm text-muted">
-              Hier erscheint Ihr Kamerabild, sobald die Gebärdenerkennung angeschlossen ist.
+              {t("cameraHint")}
             </p>
           </div>
           <div className="flex min-h-16 items-center gap-3 px-3 pt-3 pb-1">
-            <span className="shrink-0 text-sm text-muted">Erkannte Gebärden</span>
+            <span className="shrink-0 text-sm text-muted">{t("recognizedSigns")}</span>
             <span className="h-px flex-1 bg-line" />
-            <span className="font-mono text-xs text-faint">noch keine</span>
+            <span className="font-mono text-xs text-faint">{t("noneYet")}</span>
           </div>
         </section>
 
         <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-line bg-surface shadow-card">
           <div className="flex h-16 shrink-0 items-center justify-between border-b border-line px-6">
-            <h2 className="text-lg font-medium">Gespräch</h2>
+            <h2 className="text-lg font-medium">{t("conversation")}</h2>
             {connected ? (
               <span className="flex items-center gap-4 text-sm text-muted">
                 <span className="flex items-center gap-2">
-                  Praxis <LevelBars track={theirTrack} className="text-call" />
+                  <span>{t("practice")}</span> <LevelBars track={theirTrack} className="text-call" />
                 </span>
                 <span className="flex items-center gap-2">
-                  Ihre Stimme <LevelBars track={myTrack} className="text-accent" />
+                  <span>{t("yourVoice")}</span> <LevelBars track={myTrack} className="text-accent" />
                 </span>
               </span>
             ) : null}
@@ -149,10 +163,10 @@ export default function SignerPage() {
             empty={
               <p className="max-w-xs text-base text-muted">
                 {connected
-                  ? "Verbunden. Schreiben Sie unten einen Satz, er wird der Praxis vorgelesen."
+                  ? t("emptyConnected")
                   : phase === "idle"
-                    ? "Wählen Sie unten eine Praxis und starten Sie den Anruf."
-                    : `${practice} wird angerufen …`}
+                    ? t("emptyIdle")
+                    : t("emptyCalling", { name: practice })}
               </p>
             }
           />
@@ -169,8 +183,8 @@ export default function SignerPage() {
               onChange={(e) => setDraft(e.target.value)}
               disabled={!connected}
               maxLength={500}
-              placeholder={connected ? "Satz eingeben, der vorgelesen wird" : "Erst im Anruf verfügbar"}
-              aria-label="Satz, der vorgelesen wird"
+              placeholder={t(connected ? "inputConnected" : "inputIdle")}
+              aria-label={t("inputLabel")}
               className="h-12 min-w-0 flex-1 rounded-full bg-sunken/70 px-5 text-base outline-none transition-shadow duration-200 placeholder:text-faint focus:ring-2 focus:ring-accent/40 disabled:cursor-not-allowed"
             />
             <button
@@ -179,7 +193,7 @@ export default function SignerPage() {
               className="flex h-12 shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-accent pr-5 pl-4 text-base font-medium text-white transition duration-200 ease-out-soft hover:brightness-110 active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-sunken disabled:text-faint"
             >
               <SendIcon width={18} height={18} />
-              Sagen
+              <span>{t("say")}</span>
             </button>
           </form>
         </section>

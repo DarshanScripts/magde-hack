@@ -1,6 +1,7 @@
 "use client";
 
 import { MOCK_CONTACTS } from "@/lib/contract";
+import { useI18n } from "@/lib/i18n";
 import CallTimer from "./CallTimer";
 import LatticeLoader from "./reactbits/LatticeLoader";
 import { ChevronIcon, HangUpIcon, PhoneIcon } from "./icons";
@@ -21,6 +22,7 @@ export default function DialBar({
   onHangUp(): void;
 }) {
   const { name, number } = MOCK_CONTACTS[contact];
+  const { t } = useI18n();
 
   return (
     <div className="flex h-[72px] w-full max-w-2xl items-center gap-3 rounded-full border border-line bg-surface p-2.5 pl-3 shadow-float">
@@ -35,7 +37,7 @@ export default function DialBar({
 
       {phase === "idle" ? (
         <label className="relative flex min-w-0 flex-1 flex-col">
-          <span className="text-xs text-muted">Anrufen bei</span>
+          <span className="text-xs text-muted">{t("callTo")}</span>
           <select
             value={contact}
             onChange={(e) => onContact(Number(e.target.value))}
@@ -56,12 +58,12 @@ export default function DialBar({
             {phase === "connected" ? (
               <>
                 <span className="size-1.5 rounded-full bg-call" />
-                <span>Verbunden</span>
+                <span>{t("connected")}</span>
                 <CallTimer className="text-ink" />
               </>
             ) : (
               <LatticeLoader
-                label={phase === "connecting" ? "Verbinde" : "Ruft an"}
+                label={t(phase === "connecting" ? "connecting" : "ringing")}
                 pattern="ripple"
                 cellSize={3}
                 gap={2}
@@ -82,7 +84,7 @@ export default function DialBar({
           className="flex h-[52px] shrink-0 cursor-pointer items-center gap-2 rounded-full bg-call px-6 text-base font-medium text-white transition duration-200 ease-out-soft hover:brightness-105 active:scale-[0.97]"
         >
           <PhoneIcon />
-          <span>Anrufen</span>
+          <span>{t("call")}</span>
         </button>
       ) : (
         <button
@@ -92,7 +94,7 @@ export default function DialBar({
           className="flex h-[52px] shrink-0 cursor-pointer items-center gap-2 rounded-full bg-danger px-6 text-base font-medium text-white transition duration-200 ease-out-soft hover:brightness-105 active:scale-[0.97]"
         >
           <HangUpIcon />
-          <span>Auflegen</span>
+          <span>{t("hangUp")}</span>
         </button>
       )}
     </div>

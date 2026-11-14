@@ -2,9 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import type { Caption } from "@/lib/contract";
+import { useI18n } from "@/lib/i18n";
 
 export default function Captions({ captions, empty }: { captions: Caption[]; empty: React.ReactNode }) {
   const end = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -35,7 +37,7 @@ export default function Captions({ captions, empty }: { captions: Caption[]; emp
               <span className="px-2 font-mono text-xs tracking-wide text-muted">{c.gloss.join(" · ")}</span>
             ) : null}
             {c.who === "me" && !c.final ? (
-              <span className="px-2 text-xs text-muted">wird gesprochen …</span>
+              <span className="px-2 text-xs text-muted">{t("speaking")}</span>
             ) : null}
           </li>
         ))}
