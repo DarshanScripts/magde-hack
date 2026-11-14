@@ -43,6 +43,7 @@ console.error = (...args: unknown[]) => {
   consoleError(...args);
 };
 const BROW_THRESHOLD = 0.4;
+const CAMERA_KEY = "signCameraId";
 
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 const deg = (rad: number) => Math.round((rad * 1800) / Math.PI) / 10;
@@ -89,6 +90,22 @@ export default function SignCamera(props: SignCameraProps) {
   const [brows, setBrows] = useState<"up" | "down" | null>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [cameraId, setCameraId] = useState(() => localStorage.getItem(CAMERA_KEY) ?? "");
+
+  const pickCamera = (id: string) => {
+    localStorage.setItem(CAMERA_KEY, id);
+    setReady(false);
+    setError(null);
+    setCameraId(id);
+  };
+
+  useEffect(() => {
+    const list = () =>
+      navigator.mediaDevices.enumerateDevices().then((d) => setCameras(d.filter((x) => x.kind === "videoinput")));
+    navigator.mediaDevices.addEventListener("devicechange", list);
+    return () => navigator.mediaDevices.removeEventListener("devicechange", list);
+  }, []);
 
   useEffect(() => {
     propsRef.current = props;
@@ -157,8 +174,18 @@ export default function SignCamera(props: SignCameraProps) {
     };
 
     const start = async () => {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: 30 }, audio: false });
+      const size = { width: 640, height: 480, frameRate: 30 };
+      stream = await navigator.mediaDevices
+        .getUserMedia({ video: cameraId ? { ...size, deviceId: { exact: cameraId } } : size, audio: false })
+        .catch((e) => {
+          if (!cameraId) throw e;
+          localStorage.removeItem(CAMERA_KEY);
+          return navigator.mediaDevices.getUserMedia({ video: size, audio: false });
+        });
       if (cancelled) return dispose();
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      if (cancelled) return dispose();
+      setCameras(devices.filter((x) => x.kind === "videoinput"));
       video.srcObject = stream;
       await video.play();
       const fileset = await FilesetResolver.forVisionTasks(WASM_URL);
@@ -291,7 +318,7 @@ export default function SignCamera(props: SignCameraProps) {
       cancelled = true;
       dispose();
     };
-  }, []);
+  }, [cameraId]);
 
   const badge = !online ? "bg-zinc-600" : signing ? "bg-red-600" : "bg-black/60";
   return (
@@ -303,6 +330,20 @@ export default function SignCamera(props: SignCameraProps) {
         <span className={`rounded px-2 py-1 ${badge}`}>{!online ? "service offline" : signing ? "signing" : "rest"}</span>
         {brows && <span className="rounded bg-fuchsia-700 px-2 py-1">brows {brows === "up" ? "↑" : "↓"}</span>}
       </div>
+      {cameras.length > 1 && (
+        <select
+          className="absolute right-2 top-2 max-w-[45%] rounded bg-black/60 px-2 py-1 font-mono text-xs text-white"
+          value={cameras.some((c) => c.deviceId === cameraId) ? cameraId : ""}
+          onChange={(e) => pickCamera(e.target.value)}
+        >
+          <option value="">default camera</option>
+          {cameras.map((c, i) => (
+            <option key={c.deviceId} value={c.deviceId}>
+              {c.label || `camera ${i + 1}`}
+            </option>
+          ))}
+        </select>
+      )}
       {(!ready || error) && (
         <div className="absolute inset-0 grid place-items-center p-4 text-center text-white">
           {error ? `Camera/MediaPipe error: ${error}` : "Loading camera and models…"}
