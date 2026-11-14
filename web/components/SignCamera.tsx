@@ -198,7 +198,7 @@ export default function SignCamera(props: SignCameraProps) {
       let lastBrows: "up" | "down" | null = null;
       let fpsStart = performance.now();
 
-      const onFrame = () => {
+      const processFrame = () => {
         if (cancelled || !hand || !pose || !face) return;
         const now = performance.now();
         const ts = Math.max(now, lastTs + 1);
@@ -258,7 +258,20 @@ export default function SignCamera(props: SignCameraProps) {
           frames = 0;
           fpsStart = now;
         }
-        rvfc = video.requestVideoFrameCallback(onFrame);
+      };
+      let fails = 0;
+      const onFrame = () => {
+        try {
+          processFrame();
+          fails = 0;
+        } catch (e) {
+          if (fails++ === 0) console.warn("detection error, skipping frame:", e);
+          if (fails > 90) {
+            setError("Landmark detector failed repeatedly");
+            return;
+          }
+        }
+        if (!cancelled) rvfc = video.requestVideoFrameCallback(onFrame);
       };
       rvfc = video.requestVideoFrameCallback(onFrame);
     };
