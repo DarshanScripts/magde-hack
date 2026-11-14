@@ -45,6 +45,20 @@ const PHASES = (l: string): Phase[] =>
       : [[8, false, false], [8, true, false], [2, false, true], [2, true, true]];
 const targetOf = (l: string) => PHASES(l).reduce((n, [k]) => n + k, 0);
 // phase for the next take; `start` = count at which it begins
+function say(text: string) {
+  if (typeof speechSynthesis === "undefined") return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-US";
+  u.rate = 1.1;
+  speechSynthesis.speak(u);
+}
+const phaseName = (p: { chain: boolean; fast: boolean }) => `${p.fast ? "fast, " : ""}${p.chain ? "continuous" : "hands down"}`;
+function phaseLeft(l: string, count: number) {
+  const p = phaseAt(l, count);
+  const k = PHASES(l).find((_, i, all) => all.slice(0, i).reduce((n, [x]) => n + x, 0) === p.start)?.[0] ?? 0;
+  return p.start + k - count;
+}
 function phaseAt(l: string, count: number) {
   let start = 0;
   for (const [k, chain, fast] of PHASES(l)) {
@@ -117,6 +131,12 @@ export default function RecordPage() {
     };
   }, [refreshCounts]);
 
+  useEffect(() => {
+    if (mode !== "record") return;
+    const n = countsRef.current[label] ?? 0;
+    if (n < targetOf(label)) say(`${label}. ${phaseName(phaseAt(label, n))}, ${phaseLeft(label, n)} times`);
+  }, [mode, label]);
+
   const onRecorded = useCallback((lab: string, count: number) => {
     if (signStart.current) setTakeMs(Date.now() - signStart.current - 150);
     const next = { ...countsRef.current, [lab]: count };
@@ -124,7 +144,18 @@ export default function RecordPage() {
     setFlash(true);
     setTimeout(() => setFlash(false), 300);
     const todo = RECORD_ORDER.find((l) => (next[l] ?? 0) < targetOf(l));
-    if (lab === labelRef.current && count < targetOf(lab) && phaseAt(lab, count).start === count) return beep(3, 660); // new phase
+    const base = BASE_S[lab] * (phaseAt(lab, count - 1).fast ? 0.65 : 1);
+    const ms = signStart.current ? Date.now() - signStart.current - 150 : 0;
+    if (base && ms && (ms > base * 1900 || ms < base * 450)) say(ms > base * 1900 ? "too long, two signs? undo" : "too short, undo?");
+    if (lab === labelRef.current && count < targetOf(lab) && phaseAt(lab, count).start === count) {
+      // new phase: short pause in saving so there is time to change the way of signing
+      beep(3, 660);
+      say(`Now ${phaseName(phaseAt(lab, count))}, ${phaseLeft(lab, count)} times`);
+      setPaused(true);
+      setTimeout(() => setPaused(false), PAUSE_MS);
+      return;
+    }
+    if (!todo && count >= targetOf(lab)) say("All recordings done. Tell the agent.");
     if (lab !== labelRef.current || count < targetOf(lab) || !todo) return beep();
     // target reached: pause saving, switch to the next unfinished label, then resume
     beep(2, 1320);
@@ -252,7 +283,14 @@ export default function RecordPage() {
             <div
               className={`rounded-xl p-4 text-center transition-colors ${paused ? "bg-sky-200" : flash ? "bg-green-300" : current >= targetOf(label) ? "bg-green-100" : "bg-zinc-100"}`}
             >
-              {paused && <div className="text-sm font-semibold text-sky-800">next sign: get ready…</div>}
+              {paused && <div className="text-sm font-semibold text-sky-800">get ready…</div>}
+              {current < targetOf(label) ? (
+                <div className={`rounded-lg px-2 py-1 text-xl font-bold text-white ${phase.fast ? "bg-red-600" : chain ? "bg-violet-600" : "bg-zinc-700"}`}>
+                  {phaseName(phase).toUpperCase()} · {phaseLeft(label, current)} left
+                </div>
+              ) : (
+                <div className="rounded-lg bg-green-600 px-2 py-1 text-xl font-bold text-white">DONE</div>
+              )}
               <div className="text-2xl font-semibold">{label}</div>
               <div className="text-7xl font-bold tabular-nums">{current}</div>
               <div className="text-sm text-zinc-600">target {targetOf(label)}</div>
