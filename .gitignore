@@ -9,3 +9,9 @@ node_modules/
 # python
 .venv/
 __pycache__/
+
+# trained models (regenerate with sign/train.py)
+sign/models/
+
+# practice sheet media (SignDict licenses; regenerate with sign/make_practice.py)
+practice/

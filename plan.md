@@ -143,7 +143,14 @@ export const MOCK_CONTACTS = [            // fictional, display only — both jo
 ];
 export const SIGN_WS_URL = process.env.NEXT_PUBLIC_SIGN_WS_URL ?? "ws://localhost:8765/ws";
 
-export type Token = { label: string; conf: number; t: number; top?: [string, number][] }; // label from labels.json or "?"
+export type Token = {
+  label: string;                  // from labels.json or "?"
+  conf: number;
+  t: number;
+  top?: [string, number][];
+  question?: "yn" | "wh";         // DGS brows during the sign: raised = yes/no question, lowered = W-question
+  negation?: boolean;             // head shake during the sign
+};
 export type Turn = { who: "me" | "them"; text: string };
 export type Caption = { id: string; who: "me" | "them"; text: string; final: boolean; gloss?: string[] };
 export type SignStatus = { state: "rest" | "signing"; fps: number; online: boolean };
@@ -164,19 +171,23 @@ Browser → service:
 ```jsonc
 {"type":"frame","t":1731580000123,"w":1280,"h":720,
  "hands":[{"handedness":"Left","score":0.97,"lm":[[0.5123,0.6341,-0.0121], /* 21 points */]}],
- "pose":[[0.5011,0.3122,-0.2100,0.99], /* 33 points: x,y,z,visibility */]}   // pose may be null
+ "pose":[[0.5011,0.3122,-0.2100,0.99], /* 33 points: x,y,z,visibility */],   // pose may be null
+ "face":{"bs":{"browInnerUp":0.62,"jawOpen":0.10, /* 29 blendshapes */},"rot":[-4.1,12.0,2.3]}}   // yaw,pitch,roll in degrees; may be null
 {"type":"mode","mode":"infer"}
 {"type":"mode","mode":"record","label":"TERMIN","signer":"aditya"}
 {"type":"reset"}
 ```
 - Coordinates are MediaPipe normalised image coordinates (0–1) of the **non-mirrored** frame, rounded to 4 decimals.
 - `t` is in milliseconds and must strictly increase. About 30 frames per second; `hands` may be `[]`.
+- Hands run every frame; pose and face run every 3rd frame (alternating) and the last result is repeated in between.
+- Face = DGS non-manual signals: brows (yes/no question up, wh-question down), eyes, mouth/jaw (mouthing), head rotation (nod/shake).
 
 Service → browser:
 ```jsonc
 {"type":"status","state":"rest","mode":"infer","fps":29.6}          // on change + every 1 s
 {"type":"token","label":"TERMIN","conf":0.91,"t":1731580000500,
- "top":[["TERMIN",0.91],["MORGEN",0.05],["ZEIT",0.02]]}
+ "top":[["TERMIN",0.91],["MORGEN",0.05],["ZEIT",0.02]],
+ "question":"yn","negation":false}                                   // question/negation optional
 {"type":"recorded","label":"TERMIN","count":12}
 {"type":"error","message":"model not loaded"}
 ```
@@ -185,7 +196,7 @@ Service → browser:
 ### 6.4 Recorded sample: `sign/data/<LABEL>/<signer>_<unix_ms>.json`
 
 ```json
-{"label":"TERMIN","signer":"aditya","w":1280,"h":720,"frames":[{"t":0,"hands":[],"pose":[]}]}
+{"label":"TERMIN","signer":"adi","w":640,"h":480,"frames":[{"t":0,"hands":[],"pose":[],"face":null}]}
 ```
 Store **raw frames** (including pre/post padding), not features. Features can then change later without re-recording.
 
@@ -201,7 +212,7 @@ Store **raw frames** (including pre/post padding), not features. Features can th
 | `GET /api/livekit-token?identity=signer\|callee` | – | `{ "token": "...", "url": "wss://..." }` |
 | `GET /api/scribe-token` | – | `{ "token": "..." }` |
 | `POST /api/tts` | `{ "text": "Guten Tag ..." }` | `audio/mpeg` bytes |
-| `POST /api/sentence` | `{ "tokens": ["HALLO","TERMIN","WOLLEN","MORGEN","NACHMITTAG"], "history": Turn[], "profile": { "name": "Aditya" } }` | `{ "text": "Guten Tag, ich möchte gerne einen Termin für morgen Nachmittag vereinbaren." }` |
+| `POST /api/sentence` | `{ "tokens": ["HALLO","TERMIN","WOLLEN","MORGEN","NACHMITTAG"], "history": Turn[], "profile": { "name": "Aditya" }, "question": null, "negation": false }` (`question`: `"yn"`, `"wh"` or `null`) | `{ "text": "Guten Tag, ich möchte gerne einen Termin für morgen Nachmittag vereinbaren." }` |
 
 ### 6.7 Web module interfaces (inside Lane A)
 
@@ -333,6 +344,8 @@ Done when: text typed on the signer page is heard in German on the callee device
    5. NAME → "Mein Name ist {profile.name}."  WIEDERHOLEN → "Entschuldigung, können Sie das bitte wiederholen?"
    6. Number + UHR (+ VORMITTAG/NACHMITTAG/ABEND) → a clock time ("NEUN UHR ABEND" → "21 Uhr").
    7. Never give medical advice. Only express what the caller signed.
+   8. question = "yn" → phrase it as a yes/no question ("MORGEN NACHMITTAG" → "Geht es morgen Nachmittag?").
+      question = "wh" → phrase it as a W-question (wann/was/wo/wer/wie). negation = true → negate the statement ("HEUTE" → "Heute geht es nicht.").
    Return JSON: {"text": "<German sentence>"}
    ```
 3. Test cases (run with curl):
@@ -455,6 +468,8 @@ Done when: on `/record` in infer mode, each p0 sign shows the correct label ≤ 
 2. Loop:
    1. `onToken` → append a chip. `"?"` shows as a grey chip and is not sent.
    2. 1.5 s after the last token (or on Enter) → `POST /api/sentence` with the tokens, the last 6 turns and the profile.
+      Utterance flags from the tokens: `question` = the last non-empty `question` among the tokens (else `null`); `negation` = any token has `negation`.
+      Show them on the chips (e.g. "?" / "¬" badge) so the signer sees what was detected.
    3. Add caption `{ who: "me", text, gloss }` → `voice.speak(text)` → push `Turn { who: "me" }` → clear the chips.
    4. Backspace removes the last chip; Esc clears all chips.
    5. `startCaptions(remoteTrack)`: `onPartial` → live line; `onFinal` → caption + `Turn { who: "them" }`.

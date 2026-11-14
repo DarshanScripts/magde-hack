@@ -8,12 +8,12 @@ export const MOCK_CONTACTS = [            // fictional, display only — both jo
 export const SIGN_WS_URL = process.env.NEXT_PUBLIC_SIGN_WS_URL ?? "ws://localhost:8765/ws";
 
 export type Token = {
-  label: string;          // from labels.json or "?"
+  label: string;                  // from labels.json or "?"
   conf: number;
   t: number;
   top?: [string, number][];
-  question?: "yn" | "wh"; // brows raised = yes/no question, lowered = W-question
-  negation?: boolean;     // head shake during the sign
+  question?: "yn" | "wh";         // DGS brows during the sign: raised = yes/no question, lowered = W-question
+  negation?: boolean;             // head shake during the sign
 };
 export type Turn = { who: "me" | "them"; text: string };
 export type Caption = { id: string; who: "me" | "them"; text: string; final: boolean; gloss?: string[] };
