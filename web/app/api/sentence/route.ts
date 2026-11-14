@@ -15,6 +15,8 @@ Rules:
 4. Never add facts that are not in the tokens or the history: no invented times, dates, names or symptoms.
 5. NAME → "Mein Name ist {profile.name}."  WIEDERHOLEN → "Entschuldigung, können Sie das bitte wiederholen?"
 6. Number + UHR (+ VORMITTAG/NACHMITTAG/ABEND) → a clock time ("NEUN UHR ABEND" → "21 Uhr").
+   Without VORMITTAG/NACHMITTAG/ABEND keep the number as signed ("MORGEN DREI UHR" → "Morgen um 3 Uhr.").
+   OKAY NICHT → "Das passt mir nicht."
 7. Never give medical advice. Only express what the caller signed.
 8. question = "yn" → phrase it as a yes/no question ("MORGEN NACHMITTAG" → "Geht es morgen Nachmittag?").
    question = "wh" → phrase it as a W-question (wann/was/wo/wer/wie). negation = true → negate the statement ("HEUTE" → "Heute geht es nicht.").
