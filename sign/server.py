@@ -78,6 +78,20 @@ def undo(request: Request):
     raise HTTPException(404, "nothing to undo")
 
 
+@app.post("/reset/{label}")
+def reset(label: str, signer: str, request: Request):
+    """Deletes all samples of one signer for one label."""
+    if not origin_ok(request.headers.get("origin")):
+        raise HTTPException(403)
+    name = re.sub(r"[^a-z0-9_-]", "", signer.lower())[:32]
+    if label not in LABELS or not name:
+        raise HTTPException(404)
+    for path in (DATA / label).glob(f"{name}_*.json"):
+        path.unlink()
+    saved[:] = [p for p in saved if p.exists()]
+    return {"label": label, "count": count(label)}
+
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     if not origin_ok(ws.headers.get("origin")):
