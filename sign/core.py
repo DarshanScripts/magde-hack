@@ -5,6 +5,8 @@ from collections import deque
 from pathlib import Path
 
 import numpy as np
+import torch
+from torch import nn
 
 ROOT = Path(__file__).resolve().parent
 LABELS_FILE = ROOT.parent / "web" / "lib" / "labels.json"
@@ -199,3 +201,239 @@ def replay(path):
 
 if __name__ == "__main__":
     replay(sys.argv[1])
+
+
+# ---------------------------------------------------------------- features (F7)
+
+MOUTH_KEYS = (
+    "jawOpen", "jawForward", "mouthClose", "mouthFunnel", "mouthPucker", "mouthRollLower", "mouthRollUpper",
+    "mouthShrugLower", "mouthShrugUpper", "mouthPressLeft", "mouthPressRight", "mouthSmileLeft", "mouthSmileRight",
+    "mouthFrownLeft", "mouthFrownRight", "mouthStretchLeft", "mouthStretchRight", "cheekPuff",
+)
+SEQ_LEN = 32
+HAND_DIM = 63 + 4 + 2 + 1
+FEAT_DIM = 2 * HAND_DIM + len(MOUTH_KEYS) + 1
+MAX_GAP = 3
+NOSE = 0
+
+
+def _fill(a, ok):
+    """Forward/backward fill rows of `a` where `ok` is False. Returns None if nothing is valid."""
+    if not ok.any():
+        return None
+    idx = np.where(ok, np.arange(len(ok)), 0)
+    np.maximum.accumulate(idx, out=idx)
+    first = np.argmax(ok)
+    idx[:first] = first
+    return a[idx]
+
+
+def prepare(sample):
+    """Raw sample (§6.4) -> per-frame arrays in aspect-corrected image units. None if no pose at all.
+
+    hands: (T, 2, 21, 3), side 0 = signer's right (dominant), 1 = left; present: (T, 2) bool.
+    """
+    aspect = sample["w"] / sample["h"]
+    frames = sample["frames"]
+    T = len(frames)
+    scale = np.array([aspect, 1.0, aspect])
+    t = np.array([f["t"] for f in frames], dtype=float)
+    pose = np.zeros((T, 33, 2))
+    pose_ok = np.zeros(T, bool)
+    for i, f in enumerate(frames):
+        if f.get("pose"):
+            pose[i] = np.asarray(f["pose"])[:, :2] * scale[:2]
+            pose_ok[i] = np.linalg.norm(pose[i, L_SHOULDER] - pose[i, R_SHOULDER]) > 1e-3
+    pose = _fill(pose, pose_ok)
+    if pose is None:
+        return None
+
+    hands = np.zeros((T, 2, 21, 3))
+    present = np.zeros((T, 2), bool)
+    mouth = np.zeros((T, len(MOUTH_KEYS)))
+    face_ok = np.zeros(T)
+    for i, f in enumerate(frames):
+        wrists = (pose[i, R_WRIST], pose[i, L_WRIST])
+        for hand in f.get("hands") or []:
+            lm = np.asarray(hand["lm"], dtype=float) * scale
+            d = [np.linalg.norm(lm[0, :2] - w) for w in wrists]
+            side = int(np.argmin(d))
+            if present[i, side]:
+                side = 1 - side
+                if present[i, side]:
+                    continue
+            hands[i, side], present[i, side] = lm, True
+        face = f.get("face")
+        if face and face.get("bs"):
+            mouth[i] = [face["bs"].get(k, 0.0) for k in MOUTH_KEYS]
+            face_ok[i] = 1.0
+
+    for s in range(2):
+        ok = present[:, s]
+        idx = np.flatnonzero(ok)
+        for a, b in zip(idx[:-1], idx[1:]):
+            if 1 < b - a <= MAX_GAP + 1:
+                for j in range(a + 1, b):
+                    k = (t[j] - t[a]) / max(t[b] - t[a], 1e-6)
+                    hands[j, s] = (1 - k) * hands[a, s] + k * hands[b, s]
+                    present[j, s] = True
+        ok = present[:, s]
+        sm = hands[:, s].copy()
+        for j in np.flatnonzero(ok):
+            nb = [k for k in (j - 1, j, j + 1) if 0 <= k < T and ok[k]]
+            sm[j] = hands[nb, s].mean(axis=0)
+        hands[:, s] = sm
+    return {"t": t, "pose": pose, "hands": hands, "present": present, "mouth": mouth, "face": face_ok}
+
+
+def augment(p, rng):
+    """Random time warp/crop, affine jitter of hands and nose, noise, hand/face dropout. No mirroring."""
+    p = {k: v.copy() for k, v in p.items()}
+    T = len(p["t"])
+    if T > 8:
+        a, b = rng.integers(0, 3), T - rng.integers(0, 3)
+        p = {k: v[a:b] for k, v in p.items()}
+    t = p["t"]
+    span = max(t[-1] - t[0], 1.0)
+    p["t"] = t + rng.uniform(-0.1, 0.1) * span * np.sin(np.pi * (t - t[0]) / span)
+
+    mid = (p["pose"][:, L_SHOULDER] + p["pose"][:, R_SHOULDER]) / 2
+    sw = np.linalg.norm(p["pose"][:, L_SHOULDER] - p["pose"][:, R_SHOULDER], axis=1)
+    ang, sc = np.deg2rad(rng.uniform(-10, 10)), rng.uniform(0.9, 1.1)
+    R = sc * np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]])
+    shift = rng.uniform(-0.05, 0.05, 2)
+    xy = p["hands"][..., :2] - mid[:, None, None]
+    p["hands"][..., :2] = xy @ R.T + mid[:, None, None] + shift * sw[:, None, None, None]
+    p["hands"][..., :2] += rng.normal(0, 0.01, p["hands"][..., :2].shape) * sw[:, None, None, None]
+    nose = p["pose"][:, NOSE] - mid
+    p["pose"][:, NOSE] = nose @ R.T + mid + shift * sw[:, None]
+    if rng.random() < 0.05:
+        p["present"][:, 1] = False
+    p["mouth"] = np.clip(p["mouth"] * rng.uniform(0.8, 1.2) + rng.normal(0, 0.02, p["mouth"].shape), 0, 1)
+    if rng.random() < 0.1:
+        p["face"][:] = 0
+    return p
+
+
+def _resample(a, t, tn):
+    flat = a.reshape(len(t), -1)
+    out = np.stack([np.interp(tn, t, flat[:, j]) for j in range(flat.shape[1])], axis=1)
+    return out.reshape((len(tn),) + a.shape[1:])
+
+
+def encode(p):
+    """Prepared arrays -> (SEQ_LEN, FEAT_DIM) feature matrix (not standardised)."""
+    t = p["t"]
+    if len(t) < 2 or t[-1] <= t[0]:
+        t = np.arange(len(t), dtype=float)
+    tn = np.linspace(t[0], t[-1], SEQ_LEN)
+    hands = p["hands"].copy()
+    for s in range(2):
+        filled = _fill(hands[:, s], p["present"][:, s])
+        if filled is not None:
+            hands[:, s] = filled
+    hands = _resample(hands, t, tn)
+    present = _resample(p["present"].astype(float), t, tn) > 0.5
+    pose = _resample(p["pose"], t, tn)
+    mouth = _resample(p["mouth"], t, tn)
+    face = _resample(p["face"][:, None], t, tn)[:, 0] > 0.5
+
+    mid = (pose[:, L_SHOULDER] + pose[:, R_SHOULDER]) / 2
+    sw = np.maximum(np.linalg.norm(pose[:, L_SHOULDER] - pose[:, R_SHOULDER], axis=1), 1e-3)
+    nose = pose[:, NOSE]
+    parts = []
+    for s in range(2):
+        h = hands[:, s]
+        size = np.maximum(np.linalg.norm(h[:, 9, :2] - h[:, 0, :2], axis=1), 1e-3)
+        shape = (h - h[:, :1]) / size[:, None, None]
+        shape[..., 2] *= 0.5
+        loc = np.concatenate([(h[:, 0, :2] - mid) / sw[:, None], (h[:, 0, :2] - nose) / sw[:, None]], axis=1)
+        vel = np.diff(loc[:, :2], axis=0, prepend=loc[:1, :2])
+        f = np.concatenate([shape.reshape(SEQ_LEN, -1), loc, vel, np.ones((SEQ_LEN, 1))], axis=1)
+        f[~present[:, s]] = 0
+        parts.append(f)
+    mouth[~face] = 0
+    parts += [mouth, face[:, None].astype(float)]
+    return np.concatenate(parts, axis=1).astype(np.float32)
+
+
+def features(sample):
+    p = prepare(sample)
+    return None if p is None else encode(p)
+
+
+# ---------------------------------------------------------------- model (F7/F8)
+
+MODELS = ROOT / "models"
+
+
+class CNN1D(nn.Module):
+    """Linear(F->C) -> 3x residual [Conv1d k5 -> BN -> GELU -> Dropout] -> avg+max pool -> Linear."""
+
+    def __init__(self, feat_dim, n_classes, width=128, dropout=0.2):
+        super().__init__()
+        self.inp = nn.Linear(feat_dim, width)
+        self.blocks = nn.ModuleList(
+            nn.Sequential(nn.Conv1d(width, width, 5, padding=2), nn.BatchNorm1d(width), nn.GELU(), nn.Dropout(dropout))
+            for _ in range(3)
+        )
+        self.out = nn.Linear(2 * width, n_classes)
+
+    def forward(self, x):
+        h = self.inp(x).transpose(1, 2)
+        for b in self.blocks:
+            h = h + b(h)
+        return self.out(torch.cat([h.mean(2), h.amax(2)], 1))
+
+
+def knn_probs(x, templates, labels, n_classes, temp):
+    """Softmax over negative nearest-template distance per class. x: (N, D), templates: (M, D)."""
+    d = torch.cdist(torch.as_tensor(x), torch.as_tensor(templates))
+    best = torch.full((len(x), n_classes), float("inf"))
+    lab = torch.as_tensor(labels)
+    for c in range(n_classes):
+        m = lab == c
+        if m.any():
+            best[:, c] = d[:, m].min(1).values
+    return torch.softmax(-best / temp, 1).numpy()
+
+
+class Recognizer:
+    """Loads models/ (config.json + model.pt or knn.npz) and classifies raw segments."""
+
+    def __init__(self, folder=MODELS):
+        cfg_path = Path(folder) / "config.json"
+        self.cfg = json.loads(cfg_path.read_text())
+        self.mtime = cfg_path.stat().st_mtime
+        self.labels = self.cfg["labels"]
+        self.mean = np.asarray(self.cfg["mean"], np.float32)
+        self.std = np.asarray(self.cfg["std"], np.float32)
+        if self.cfg["arch"] == "cnn1d":
+            self.net = CNN1D(self.cfg["feat_dim"], len(self.labels), self.cfg.get("width", 128))
+            self.net.load_state_dict(torch.load(Path(folder) / "model.pt", map_location="cpu", weights_only=True))
+            self.net.eval()
+        else:
+            k = np.load(Path(folder) / "knn.npz")
+            self.templates, self.tlabels = k["templates"], k["labels"]
+
+    def probs(self, x):
+        """x: (N, SEQ_LEN, FEAT_DIM) unstandardised -> (N, classes)."""
+        z = (x - self.mean) / self.std
+        if self.cfg["arch"] == "cnn1d":
+            with torch.no_grad():
+                return torch.softmax(self.net(torch.as_tensor(z)), 1).numpy()
+        return knn_probs(z.reshape(len(z), -1), self.templates, self.tlabels, len(self.labels), self.cfg["temp"])
+
+    def predict(self, sample):
+        """Returns (label or "?", conf, top3) for a raw sample dict (w, h, frames)."""
+        x = features(sample)
+        if x is None:
+            return "?", 0.0, []
+        pr = self.probs(x[None])[0]
+        order = np.argsort(-pr)
+        top = [(self.labels[i], round(float(pr[i]), 3)) for i in order[:3]]
+        label, conf = top[0]
+        margin = conf - (top[1][1] if len(top) > 1 else 0.0)
+        if label == self.cfg["none"] or conf < self.cfg["threshold"] or margin < self.cfg["margin"]:
+            label = "?"
+        return label, conf, top

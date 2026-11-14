@@ -9,3 +9,6 @@ node_modules/
 # python
 .venv/
 __pycache__/
+
+# trained models (regenerate with sign/train.py)
+sign/models/
