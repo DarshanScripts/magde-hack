@@ -33,6 +33,8 @@ const de = {
   ringing: "Ruft an",
   practiceHungUp: "Die Praxis hat aufgelegt.",
   connectionLost: "Die Verbindung wurde getrennt.",
+  noSoundOutput:
+    "Die Tonausgabe dieses Computers funktioniert nicht. Ihre Stimme wird übertragen, aber die Praxis ist hier nicht zu hören und es gibt keine Untertitel. Bitte in Windows ein anderes Ausgabegerät wählen und neu anrufen.",
   duplicateSigner:
     "Ein anderes Gerät hat diese Anrufer-Seite geöffnet und den Anruf übernommen. Das zweite Gerät muss /callee öffnen.",
   duplicateCallee: "Ein anderes Gerät hat die Praxis-Seite geöffnet und den Anruf übernommen.",
@@ -91,6 +93,8 @@ const en: typeof de = {
   ringing: "Ringing",
   practiceHungUp: "The practice hung up.",
   connectionLost: "The connection was lost.",
+  noSoundOutput:
+    "This computer's sound output is not working. Your voice is sent, but the practice cannot be heard here and there are no captions. Pick another output device in Windows, then call again.",
   duplicateSigner:
     "Another device opened this caller page and took over the call. The second device has to open /callee instead.",
   duplicateCallee: "Another device opened the practice page and took over the call.",

@@ -6,11 +6,34 @@ type Identity = (typeof IDENTITY)[keyof typeof IDENTITY];
 
 let ctx: AudioContext | null = null;
 
+// The shared context only feeds the call and the level meters, never the speakers, so it is not tied to a sound
+// output device: with a stalled or missing device a normal AudioContext stands still and the voice never leaves the PC.
+function newContext(): AudioContext {
+  try {
+    return new AudioContext({ sinkId: { type: "none" } } as AudioContextOptions);
+  } catch {
+    return new AudioContext();
+  }
+}
+
 // One shared context. Call it inside a click/tap first, otherwise browsers keep it suspended.
 export function audioContext(): AudioContext {
-  if (!ctx || ctx.state === "closed") ctx = new AudioContext();
+  if (!ctx || ctx.state === "closed") ctx = newContext();
   if (ctx.state === "suspended") void ctx.resume();
   return ctx;
+}
+
+// False when the computer's sound output does not accept audio. The browser then cannot play or decode the other
+// side's voice either, so there is nothing to hear and nothing to caption.
+export async function soundOutputWorks(): Promise<boolean> {
+  const probe = new AudioContext();
+  try {
+    await probe.resume();
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    return probe.state !== "running" || probe.currentTime > 0.2;
+  } finally {
+    void probe.close();
+  }
 }
 
 // Turns a failed join into a sentence the person on the page can act on.

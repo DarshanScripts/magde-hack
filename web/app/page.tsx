@@ -6,7 +6,7 @@ import DialBar, { type CallPhase } from "@/components/DialBar";
 import LangToggle from "@/components/LangToggle";
 import LevelBars from "@/components/LevelBars";
 import { HandIcon, SendIcon } from "@/components/icons";
-import { createVoice, joinCall, describeCallError } from "@/lib/call";
+import { createVoice, joinCall, describeCallError, soundOutputWorks } from "@/lib/call";
 import { useI18n } from "@/lib/i18n";
 import { startCaptions, type CaptionState } from "@/lib/stt";
 import { setProfileName, useMockMode, useProfileName } from "@/lib/profile";
@@ -180,6 +180,7 @@ export default function SignerPage() {
         call.room.localParticipant.getTrackPublicationByName(TTS_TRACK_NAME)?.track?.mediaStreamTrack ?? null,
       );
       setPhase((p) => (p === "connecting" ? "ringing" : p));
+      if (!(await soundOutputWorks()) && session.current) setNotice(t("noSoundOutput"));
     } catch (err) {
       console.error(err);
       hangUp(describeCallError(err, t));
