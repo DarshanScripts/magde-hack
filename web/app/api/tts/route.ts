@@ -1,6 +1,9 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 
 const MAX_CHARS = 500;
+// v4 Turbo is the expressive model built for real-time use. `eleven_v4` is richer but about 0.6 s slower per sentence;
+// `eleven_flash_v2_5` is the fastest and flattest. Override with ELEVEN_LABS_TTS_MODEL.
+const DEFAULT_MODEL = "eleven_v4_turbo";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -17,7 +20,7 @@ export async function POST(request: Request) {
     const elevenlabs = new ElevenLabsClient({ apiKey: ELEVEN_LABS_API_KEY });
     const audio = await elevenlabs.textToSpeech.stream(ELEVEN_LABS_VOICE_ID, {
       text,
-      modelId: "eleven_flash_v2_5",
+      modelId: process.env.ELEVEN_LABS_TTS_MODEL || DEFAULT_MODEL,
       outputFormat: "mp3_44100_128",
       languageCode: "de",
     });
