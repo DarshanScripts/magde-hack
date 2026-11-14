@@ -1,26 +1,62 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-paper: #f3efe7;
+  --color-surface: #fffdf9;
+  --color-sunken: #ebe6db;
+  --color-line: #e2dccf;
+  --color-ink: #2b2620;
+  --color-muted: #81796c;
+  --color-faint: #b3ab9d;
+  --color-accent: #3d5afe;
+  --color-accent-soft: #e6eaff;
+  --color-call: #1f9d63;
+  --color-call-soft: #dff3e8;
+  --color-danger: #e5484d;
+  --color-danger-soft: #fde7e6;
+
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 1px 2px rgb(84 66 38 / 0.05), 0 12px 32px -12px rgb(84 66 38 / 0.14);
+  --shadow-float: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 2px 4px rgb(84 66 38 / 0.06), 0 24px 48px -16px rgb(84 66 38 / 0.28);
+
+  --ease-out-soft: cubic-bezier(0.23, 1, 0.32, 1);
+
+  --animate-rise: rise 420ms var(--ease-out-soft) both;
+  --animate-ring: ring 2.6s var(--ease-out-soft) infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); filter: blur(3px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes ring {
+  0% { opacity: 0.55; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.9); }
+}
+
+html {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+}
+
+.dot-grid {
+  background-image: radial-gradient(circle, rgb(84 66 38 / 0.13) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }
