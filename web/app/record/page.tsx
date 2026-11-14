@@ -40,9 +40,9 @@ type Phase = [number, boolean, boolean];
 const PHASES = (l: string): Phase[] =>
   l === labels.none
     ? [[34, false, false]] // already recorded
-    : ["WIEDERHOLEN", "NACHMITTAG"].includes(l) || !labels.p0.includes(l)
-      ? [[8, false, false], [8, true, false], [2, false, true], [2, true, true]] // 20 from scratch
-      : [[15, false, false], [3, true, false], [2, true, true]]; // 20: 15 hands down already recorded
+    : labels.p0.includes(l)
+      ? [[15, false, false]] // 15 max; core signs already have them
+      : [[8, false, false], [7, true, false]]; // 15 max: 8 hands down (done), rest continuous
 const targetOf = (l: string) => PHASES(l).reduce((n, [k]) => n + k, 0);
 // phase for the next take; `start` = count at which it begins
 function say(text: string) {
