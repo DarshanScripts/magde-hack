@@ -56,7 +56,7 @@ export default function DialBar({
             {phase === "connected" ? (
               <>
                 <span className="size-1.5 rounded-full bg-call" />
-                Verbunden
+                <span>Verbunden</span>
                 <CallTimer className="text-ink" />
               </>
             ) : (
@@ -76,21 +76,23 @@ export default function DialBar({
 
       {phase === "idle" ? (
         <button
+          key="dial"
           type="button"
           onClick={onDial}
           className="flex h-[52px] shrink-0 cursor-pointer items-center gap-2 rounded-full bg-call px-6 text-base font-medium text-white transition duration-200 ease-out-soft hover:brightness-105 active:scale-[0.97]"
         >
           <PhoneIcon />
-          Anrufen
+          <span>Anrufen</span>
         </button>
       ) : (
         <button
+          key="hangup"
           type="button"
           onClick={onHangUp}
           className="flex h-[52px] shrink-0 cursor-pointer items-center gap-2 rounded-full bg-danger px-6 text-base font-medium text-white transition duration-200 ease-out-soft hover:brightness-105 active:scale-[0.97]"
         >
           <HangUpIcon />
-          Auflegen
+          <span>Auflegen</span>
         </button>
       )}
     </div>

@@ -98,13 +98,13 @@ export default function CalleePage() {
           </h1>
           <div className="flex h-6 items-center text-base text-muted">
             {connected ? (
-              <CallTimer />
+              <CallTimer key="timer" />
             ) : phase === "connecting" ? (
-              <LatticeLoader label="Verbinde" pattern="ripple" cellSize={3} gap={2} showTimer={false} color="var(--color-accent)" />
+              <LatticeLoader key="loader" label="Verbinde" pattern="ripple" cellSize={3} gap={2} showTimer={false} color="var(--color-accent)" />
             ) : phase === "waiting" ? (
-              "Sie sind bereit. Das Mikrofon ist an."
+              <span key="ready">Sie sind bereit. Das Mikrofon ist an.</span>
             ) : (
-              "Praxis-Seite für eingehende Anrufe"
+              <span key="idle">Praxis-Seite für eingehende Anrufe</span>
             )}
           </div>
         </div>
@@ -133,7 +133,7 @@ export default function CalleePage() {
               }`}
             >
               {muted ? <MicOffIcon /> : <MicIcon />}
-              {muted ? "Stumm" : "Mikrofon an"}
+              <span>{muted ? "Stumm" : "Mikrofon an"}</span>
             </button>
             <button
               type="button"
@@ -141,7 +141,7 @@ export default function CalleePage() {
               className="flex h-16 flex-1 cursor-pointer items-center justify-center gap-2 rounded-full bg-danger text-base font-medium text-white shadow-float transition duration-200 ease-out-soft active:scale-[0.97]"
             >
               <HangUpIcon />
-              Auflegen
+              <span>Auflegen</span>
             </button>
           </>
         ) : (
@@ -151,7 +151,7 @@ export default function CalleePage() {
             className="flex h-16 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-call text-lg font-medium text-white shadow-float transition duration-200 ease-out-soft hover:brightness-105 active:scale-[0.97]"
           >
             <PhoneIcon />
-            Beitreten
+            <span>Beitreten</span>
           </button>
         )}
       </footer>
