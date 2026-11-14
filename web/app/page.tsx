@@ -2,12 +2,12 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import Brand from "@/components/Brand";
 import Captions from "@/components/Captions";
 import DialBar, { type CallPhase } from "@/components/DialBar";
 import LangToggle from "@/components/LangToggle";
 import LevelBars from "@/components/LevelBars";
 import { HandIcon, SendIcon } from "@/components/icons";
-import { Logo } from "@/components/Logo";
 import { createVoice, joinCall, describeCallError, soundOutputWorks } from "@/lib/call";
 import { useI18n } from "@/lib/i18n";
 import { startCaptions, type CaptionState } from "@/lib/stt";
@@ -284,11 +284,7 @@ export default function SignerPage() {
   return (
     <div className="flex h-dvh min-h-[640px] flex-col gap-4 p-4 sm:p-5">
       <header className="flex items-center justify-between px-2">
-        <div className="flex items-center gap-2.5">
-          <Logo />
-          <span className="text-lg font-semibold tracking-tight">Beyond Words</span>
-        </div>
-        <p className="hidden text-sm text-muted lg:block">{t("tagline")}</p>
+        <Brand />
         <div className="flex items-center gap-3">
           <a
             href="/callee"

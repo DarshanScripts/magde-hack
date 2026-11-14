@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 
 // Interface text only. The spoken voice and the conversation itself stay German.
 const de = {
-  tagline: "Gebärden werden zur Stimme. Sprache wird zu Text.",
+  claim: "Gebärden werden Stimme",
   practicePage: "Praxis-Seite",
   cameraOff: "Kamera aus",
   signCamera: "Gebärdenkamera",
@@ -71,7 +71,7 @@ const de = {
 };
 
 const en: typeof de = {
-  tagline: "Signs become a voice. Speech becomes text.",
+  claim: "Signs become voice",
   practicePage: "Practice page",
   cameraOff: "Camera off",
   signCamera: "Sign camera",
