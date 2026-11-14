@@ -10,7 +10,7 @@ const SignCamera = dynamic(() => import("@/components/SignCamera"), { ssr: false
 const SERVICE_URL = SIGN_WS_URL.replace(/^ws/, "http").replace(/\/ws$/, "");
 const TARGET = 25;
 const NONE_TARGET = 40;
-const EXTRA = ["KOPF", "BAUCH", "FIEBER", "VORMITTAG", "ABEND", "ZEIT", "OKAY", "NICHT", "MOECHTEN",
+const EXTRA = ["KOPF", "BAUCH", "FIEBER", "VORMITTAG", "ABEND", "OKAY", "NICHT", "MOECHTEN",
   "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS", "SIEBEN"];
 const RECORD_ORDER = [...labels.p0, ...EXTRA, labels.none];
 // median length of the first (normal-speed) session per sign, seconds

@@ -44,7 +44,7 @@ INFO = {
     "NICHT": ("not", "OKAY NICHT → „Das passt mir nicht.“"),
     "MOECHTEN": ("would like (video: mögen)", "TERMIN MOECHTEN → „Ich möchte einen Termin.“"),
 }
-EXTRA = ["KOPF", "BAUCH", "FIEBER", "VORMITTAG", "ABEND", "ZEIT", "OKAY", "NICHT", "MOECHTEN",
+EXTRA = ["KOPF", "BAUCH", "FIEBER", "VORMITTAG", "ABEND", "OKAY", "NICHT", "MOECHTEN",
          "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS", "SIEBEN"]
 NUMBERS = {
     "EINS": "Thumb out (fist), palm towards you. Hold at the chest with a short downward tap, not a thumbs-up gesture.",
@@ -162,7 +162,7 @@ back to "rest" once. If one sign flips it twice, or not at all, tell the agent.<
 <table border="1" cellpadding="4" style="border-collapse:collapse">
 <tr><th>Group</th><th>Target</th><th>What</th></tr>
 <tr><td>15 core signs</td><td>35 (15 old + 20 new)</td><td>New takes <b>fast</b>: about 65% of your normal length</td></tr>
-<tr><td>16 new words (below)</td><td>25</td><td>Mix normal and fast</td></tr>
+<tr><td>15 new words (below)</td><td>25</td><td>Mix normal and fast</td></tr>
 <tr><td>_NONE</td><td>40 (34 done)</td><td>Everyday non-sign movements</td></tr>
 </table>
 <ul>
@@ -196,7 +196,7 @@ padding:0 6px;border-radius:4px;font-size:12px}}
 \n.nums figure{{background:#f7f7f7;border-radius:8px;padding:6px}} .nums figcaption{{position:static;background:none;color:#333}}\n.credit{{font-size:12px;color:#777;margin:6px 0 0}} code{{background:#f3f3f3;padding:0 4px;border-radius:4px}}
 </style></head><body>
 <h1>DGS practice sheet</h1>
-<p>15 core signs (p0) and 16 new words. Videos loop; use 0.5× and mirror to learn.</p>
+<p>15 core signs (p0) and 15 new words. Videos loop; use 0.5× and mirror to learn.</p>
 <nav>{nav}</nav>
 {guide}
 <h2>Core signs (record these)</h2>
