@@ -12,6 +12,12 @@ const TARGET = 15;
 const NONE_TARGET = 30;
 const RECORD_ORDER = [...labels.p0, labels.none]; // p1 (numbers, extras) not recorded for now
 const PAUSE_MS = 2500;
+const SENTENCE_GAP_MS = 4000;
+
+function flags(tokens: Token[]) {
+  const question = [...tokens].reverse().find((t) => t.question)?.question ?? null;
+  return { question, negation: tokens.some((t) => t.negation) };
+}
 const targetOf = (l: string) => (l === labels.none ? NONE_TARGET : TARGET);
 const REFS: Record<string, { video: string; word: string; credit: string; license: string }> = refs;
 
@@ -40,6 +46,10 @@ export default function RecordPage() {
   const [token, setToken] = useState<Token | null>(null);
   const [flash, setFlash] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [buffer, setBuffer] = useState<Token[]>([]);
+  const [sentences, setSentences] = useState<Token[][]>([]);
+  const bufferRef = useRef<Token[]>([]);
+  const sentenceTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const labelRef = useRef(label);
   const countsRef = useRef(counts);
   useEffect(() => {
@@ -79,6 +89,42 @@ export default function RecordPage() {
     setTimeout(() => setPaused(false), PAUSE_MS);
   }, []);
 
+  const endSentence = useCallback(() => {
+    clearTimeout(sentenceTimer.current);
+    const b = bufferRef.current;
+    if (!b.length) return;
+    bufferRef.current = [];
+    setBuffer([]);
+    setSentences((s) => [...s.slice(-19), b]);
+  }, []);
+
+  const onToken = useCallback(
+    (t: Token) => {
+      setToken(t);
+      setHistory((h) => [...h.slice(-11), t]);
+      if (t.label === "?") return;
+      bufferRef.current = [...bufferRef.current, t];
+      setBuffer(bufferRef.current);
+      clearTimeout(sentenceTimer.current);
+      sentenceTimer.current = setTimeout(endSentence, SENTENCE_GAP_MS);
+    },
+    [endSentence],
+  );
+
+  useEffect(() => {
+    if (mode !== "infer") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (e.key === "Enter") endSentence();
+      if (e.key === "Backspace") {
+        bufferRef.current = bufferRef.current.slice(0, -1);
+        setBuffer(bufferRef.current);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode, endSentence]);
+
   const resetLabel = async () => {
     if (!confirm(`Delete all ${counts[label] ?? 0} ${label} samples of "${signer}"?`)) return;
     const res = await fetch(`${SERVICE_URL}/reset/${label}?signer=${encodeURIComponent(signer)}`, { method: "POST" }).catch(() => null);
@@ -101,15 +147,12 @@ export default function RecordPage() {
   const btn = "rounded-lg px-3 py-2 font-medium";
 
   return (
-    <main className="mx-auto grid min-h-screen w-full max-w-7xl gap-6 bg-white p-6 text-zinc-900 lg:grid-cols-[1fr_380px]">
+    <main className="mx-auto grid min-h-screen w-full max-w-7xl gap-6 bg-white p-6 text-zinc-900 lg:grid-cols-2">
       <SignCamera
         mode={paused ? "infer" : mode}
         recordLabel={label}
         signer={signer}
-        onToken={(t) => {
-          setToken(t);
-          setHistory((h) => [...h.slice(-11), t]);
-        }}
+        onToken={onToken}
         onStatus={setStatus}
         onRecorded={onRecorded}
       />
@@ -209,6 +252,35 @@ export default function RecordPage() {
           </div>
         )}
 
+        {mode === "infer" && (
+          <div className="rounded-xl border-2 border-blue-500 p-4">
+            <div className="flex items-center justify-between text-sm text-zinc-600">
+              <span>current sentence (ends after {SENTENCE_GAP_MS / 1000} s pause or Enter · Backspace removes last)</span>
+            </div>
+            <div className="min-h-12 py-2 text-3xl font-bold text-blue-700">
+              {buffer.length ? <Gloss tokens={buffer} /> : <span className="text-zinc-400">sign…</span>}
+            </div>
+            <button onClick={endSentence} disabled={!buffer.length} className={`${btn} w-full bg-blue-600 text-white disabled:opacity-40`}>
+              end sentence (Enter)
+            </button>
+            {sentences.length > 0 && (
+              <div className="mt-3 flex flex-col gap-1 border-t pt-2">
+                <div className="flex justify-between text-sm text-zinc-600">
+                  <span>sentences</span>
+                  <button onClick={() => setSentences([])} className="underline">
+                    clear
+                  </button>
+                </div>
+                {[...sentences].reverse().map((s, i) => (
+                  <div key={sentences.length - i} className="text-xl font-semibold">
+                    <Gloss tokens={s} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="max-h-80 overflow-auto rounded-xl border p-3 font-mono text-sm">
           {RECORD_ORDER.map((l) => (
             <div key={l} className={`flex justify-between ${l === label ? "font-bold" : ""}`}>
@@ -219,5 +291,16 @@ export default function RecordPage() {
         </div>
       </aside>
     </main>
+  );
+}
+
+function Gloss({ tokens }: { tokens: Token[] }) {
+  const { question, negation } = flags(tokens);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      {tokens.map((t) => t.label).join(" · ")}
+      {question && <span className="rounded bg-fuchsia-600 px-2 text-base text-white">{question === "yn" ? "? ja/nein" : "? W-Frage"}</span>}
+      {negation && <span className="rounded bg-red-600 px-2 text-base text-white">¬ nicht</span>}
+    </span>
   );
 }
