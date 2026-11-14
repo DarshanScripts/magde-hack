@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import Captions from "@/components/Captions";
 import DialBar, { type CallPhase } from "@/components/DialBar";
 import LangToggle from "@/components/LangToggle";
@@ -9,7 +9,14 @@ import { HandIcon, SendIcon } from "@/components/icons";
 import { createVoice, joinCall, describeCallError } from "@/lib/call";
 import { useI18n } from "@/lib/i18n";
 import { startCaptions, type CaptionState } from "@/lib/stt";
-import { IDENTITY, MOCK_CONTACTS, TTS_TRACK_NAME, type Caption } from "@/lib/contract";
+import { setProfileName, useMockMode, useProfileName } from "@/lib/profile";
+import labels from "@/lib/labels.json";
+import { IDENTITY, MOCK_CONTACTS, TTS_TRACK_NAME, type Caption, type Turn } from "@/lib/contract";
+
+const UNCERTAIN = "?";
+const SENTENCE_DELAY_MS = 1500;
+const HISTORY_TURNS = 6;
+const MOCK_LABELS = [...labels.p0, ...labels.p1, UNCERTAIN];
 
 type Session = {
   leave(): Promise<void>;
@@ -25,12 +32,73 @@ export default function SignerPage() {
   const [captionState, setCaptionState] = useState<CaptionState | null>(null);
   const [theirTrack, setTheirTrack] = useState<MediaStreamTrack | null>(null);
   const [myTrack, setMyTrack] = useState<MediaStreamTrack | null>(null);
+  const [chips, setChips] = useState<string[]>([]);
   const session = useRef<Session | null>(null);
   const nextId = useRef(0);
+  const pending = useRef<{ chips: string[]; timer?: ReturnType<typeof setTimeout> }>({ chips: [] });
+  const history = useRef<Turn[]>([]);
   const { t } = useI18n();
+  const profileName = useProfileName();
+  const mock = useMockMode();
+
+  useEffect(() => {
+    history.current = captions.filter((c) => c.final || c.who === "them").slice(-HISTORY_TURNS).map(({ who, text }) => ({ who, text }));
+  }, [captions]);
+
+  function updateChips(next: string[]) {
+    clearTimeout(pending.current.timer);
+    pending.current = { chips: next, timer: next.length ? setTimeout(sendChips, SENTENCE_DELAY_MS) : undefined };
+    setChips(next);
+  }
+
+  function addToken(label: string) {
+    if (session.current?.voice) updateChips([...pending.current.chips, label]);
+  }
+
+  // Recognized signs -> one German sentence -> spoken into the call.
+  async function sendChips() {
+    const gloss = pending.current.chips.filter((label) => label !== UNCERTAIN);
+    updateChips([]);
+    if (!gloss.length || !session.current?.voice) return;
+    const id = `me-${nextId.current++}`;
+    setCaptions((list) => [...list, { id, who: "me", text: "…", final: false, gloss }]);
+    try {
+      const res = await fetch("/api/sentence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tokens: gloss, history: history.current, profile: { name: profileName } }),
+      });
+      if (!res.ok) throw new Error("sentence request failed");
+      const { text } = (await res.json()) as { text: string };
+      setCaptions((list) => list.map((c) => (c.id === id ? { ...c, text } : c)));
+      await speakCaption(id, text);
+    } catch (err) {
+      console.error(err);
+      setCaptions((list) => list.filter((c) => c.id !== id));
+      setNotice(t("sentenceFailed"));
+    }
+  }
+
+  const onKey = useEffectEvent((e: KeyboardEvent) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || !pending.current.chips.length) return;
+    if (e.key === "Enter") void sendChips();
+    else if (e.key === "Backspace") updateChips(pending.current.chips.slice(0, -1));
+    else if (e.key === "Escape") updateChips([]);
+    else return;
+    e.preventDefault();
+  });
+
+  useEffect(() => {
+    const listener = (e: KeyboardEvent) => onKey(e);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
 
   function reset(message: string | null) {
     session.current = null;
+    clearTimeout(pending.current.timer);
+    pending.current = { chips: [] };
+    setChips([]);
     setPhase("idle");
     setTheirTrack(null);
     setMyTrack(null);
@@ -74,13 +142,16 @@ export default function SignerPage() {
   }
 
   async function say(text: string) {
-    const voice = session.current?.voice;
-    if (!voice || !text) return;
+    if (!session.current?.voice || !text) return;
     const id = `me-${nextId.current++}`;
     setDraft("");
     setCaptions((list) => [...list, { id, who: "me", text, final: false }]);
+    await speakCaption(id, text);
+  }
+
+  async function speakCaption(id: string, text: string) {
     try {
-      await voice.speak(text);
+      await session.current?.voice?.speak(text);
       setCaptions((list) => list.map((c) => (c.id === id ? { ...c, final: true } : c)));
     } catch (err) {
       console.error(err);
@@ -153,6 +224,14 @@ export default function SignerPage() {
           >
             {t("practicePage")}
           </a>
+          <input
+            value={profileName}
+            onChange={(e) => setProfileName(e.target.value)}
+            maxLength={60}
+            placeholder={t("yourName")}
+            aria-label={t("yourName")}
+            className="h-9 w-36 rounded-full border border-line bg-surface px-4 text-sm outline-none transition-shadow duration-200 placeholder:text-faint focus:ring-2 focus:ring-accent/40"
+          />
           <LangToggle />
         </div>
       </header>
@@ -168,14 +247,47 @@ export default function SignerPage() {
               <HandIcon width={28} height={28} />
             </span>
             <p className="text-lg font-medium">{t("signCamera")}</p>
-            <p className="max-w-xs text-sm text-muted">
-              {t("cameraHint")}
-            </p>
+            <p className="max-w-xs text-sm text-muted">{t(mock ? "mockHint" : "cameraHint")}</p>
+            {mock ? (
+              <div className="flex max-w-xl flex-wrap justify-center gap-1.5 px-4 pt-2">
+                {MOCK_LABELS.map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    disabled={!connected}
+                    onClick={() => addToken(label)}
+                    className="h-9 cursor-pointer rounded-full border border-line bg-surface px-3 font-mono text-xs tracking-wide shadow-card transition duration-200 ease-out-soft hover:border-accent hover:text-accent active:scale-[0.96] disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-line"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div className="flex min-h-16 items-center gap-3 px-3 pt-3 pb-1">
             <span className="shrink-0 text-sm text-muted">{t("recognizedSigns")}</span>
-            <span className="h-px flex-1 bg-line" />
-            <span className="font-mono text-xs text-faint">{t("noneYet")}</span>
+            {chips.length ? (
+              <>
+                <span data-chips className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                  {chips.map((label, i) => (
+                    <span
+                      key={i}
+                      className={`animate-rise rounded-full px-3 py-1 font-mono text-xs tracking-wide ${
+                        label === UNCERTAIN ? "bg-sunken text-faint" : "bg-accent/10 text-accent"
+                      }`}
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </span>
+                <span className="hidden shrink-0 text-xs text-faint xl:block">{t("chipKeys")}</span>
+              </>
+            ) : (
+              <>
+                <span className="h-px flex-1 bg-line" />
+                <span className="font-mono text-xs text-faint">{t("noneYet")}</span>
+              </>
+            )}
           </div>
         </section>
 
