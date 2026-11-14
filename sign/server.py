@@ -180,6 +180,11 @@ async def ws_endpoint(ws: WebSocket):
                     await ws.send_json({"type": "status", "state": seg.state, "mode": mode, "fps": fps})
 
             elif kind == "mode":
+                name = re.sub(r"[^a-z0-9_-]", "", str(m.get("signer") or "").lower())[:32]
+                if (mode == "record" and m.get("mode") == "record" and m.get("label") in LABELS
+                        and name == signer and (m.get("chain") is True) == chain):
+                    label = m["label"]  # only the label changed (random prompts): keep tracking the hands
+                    continue
                 seg.reset()
                 split = False
                 last_status = 0.0

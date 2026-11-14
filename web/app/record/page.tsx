@@ -39,10 +39,10 @@ function flags(tokens: Token[]) {
 type Phase = [number, boolean, boolean];
 const PHASES = (l: string): Phase[] =>
   l === labels.none
-    ? [[34, false, false], [6, true, false]]
+    ? [[34, false, false], [11, true, false]]
     : labels.p0.includes(l)
-      ? [[15, false, false], [15, true, false], [5, false, true], [5, true, true]]
-      : [[8, false, false], [8, true, false], [2, false, true], [2, true, true]];
+      ? [[15, false, false], [20, true, false], [5, false, true], [5, true, true]]
+      : [[8, false, false], [13, true, false], [2, false, true], [2, true, true]];
 const targetOf = (l: string) => PHASES(l).reduce((n, [k]) => n + k, 0);
 // phase for the next take; `start` = count at which it begins
 function say(text: string) {
@@ -59,6 +59,32 @@ function phaseLeft(l: string, count: number) {
   const k = PHASES(l).find((_, i, all) => all.slice(0, i).reduce((n, [x]) => n + x, 0) === p.start)?.[0] ?? 0;
   return p.start + k - count;
 }
+type Style = { chain: boolean; fast: boolean };
+const BLOCK = 1000; // stay in one style until no label needs it (few switches)
+const same = (a: Style, b: Style) => a.chain === b.chain && a.fast === b.fast;
+// first style (in a fixed order) that some label still needs
+function pickStyle(counts: Record<string, number>): Style | null {
+  const left = new Map<string, number>();
+  for (const l of RECORD_ORDER) {
+    const n = counts[l] ?? 0;
+    if (n >= targetOf(l)) continue;
+    const p = phaseAt(l, n), key = `${p.chain}|${p.fast}`;
+    left.set(key, (left.get(key) ?? 0) + phaseLeft(l, n));
+  }
+  // order: hands down → continuous → fast (so every word gets basic data first if time runs out)
+  const best = ["false|false", "true|false", "false|true", "true|true"].filter((k) => left.has(k)).map((k) => [k])[0];
+  return best ? { chain: best[0].startsWith("true"), fast: best[0].endsWith("true") } : null;
+}
+// random label whose current phase has this style, weighted by takes left, never the same twice in a row
+function pickLabel(counts: Record<string, number>, style: Style, not: string[]): string | null {
+  const c = RECORD_ORDER.filter((l) => (counts[l] ?? 0) < targetOf(l) && same(phaseAt(l, counts[l] ?? 0), style));
+  const pool = c.filter((l) => !not.includes(l)).length ? c.filter((l) => !not.includes(l)) : c;
+  const w = pool.map((l) => phaseLeft(l, counts[l] ?? 0));
+  let r = Math.random() * w.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < pool.length; i++) if ((r -= w[i]) < 0) return pool[i];
+  return pool[0] ?? null;
+}
+
 function phaseAt(l: string, count: number) {
   let start = 0;
   for (const [k, chain, fast] of PHASES(l)) {
@@ -92,6 +118,11 @@ export default function RecordPage() {
   const [history, setHistory] = useState<Token[]>([]);
   const [status, setStatus] = useState<SignStatus>({ state: "rest", fps: 0, online: false });
   const [takeMs, setTakeMs] = useState(0);
+  const [random, setRandom] = useState(true);
+  const randomRef = useRef(true);
+  const [upNext, setUpNext] = useState<string | null>(null);
+  const [blockStyle, setBlockStyle] = useState<Style | null>(null);
+  const prompt = useRef<{ style: Style | null; left: number; next: string | null }>({ style: null, left: 0, next: null });
   const [chainOverride, setChainOverride] = useState<{ label: string; on: boolean } | null>(null);
   const signStart = useRef(0);
   const onStatus = useCallback((s: SignStatus) => {
@@ -131,11 +162,33 @@ export default function RecordPage() {
     };
   }, [refreshCounts]);
 
+  const startBlock = useCallback((counts: Record<string, number>, after: string[]) => {
+    const style = pickStyle(counts);
+    if (!style) {
+      say("All recordings done. Tell the agent.");
+      return null;
+    }
+    const first = pickLabel(counts, style, after);
+    const prev = prompt.current.style;
+    prompt.current = { style, left: BLOCK, next: first && pickLabel(counts, style, [first]) };
+    setUpNext(prompt.current.next);
+    setBlockStyle(style);
+    if (!prev || !same(prev, style)) say(`Random signs, ${phaseName(style)}`);
+    return first;
+  }, []);
+
   useEffect(() => {
     if (mode !== "record") return;
+    if (randomRef.current) {
+      if (!prompt.current.style) {
+        const first = startBlock(countsRef.current, []);
+        if (first) setTimeout(() => setLabel(first), 0);
+      }
+      return;
+    }
     const n = countsRef.current[label] ?? 0;
     if (n < targetOf(label)) say(`${label}. ${phaseName(phaseAt(label, n))}, ${phaseLeft(label, n)} times`);
-  }, [mode, label]);
+  }, [mode, label, startBlock]);
 
   const onRecorded = useCallback((lab: string, count: number) => {
     if (signStart.current) setTakeMs(Date.now() - signStart.current - 150);
@@ -147,6 +200,30 @@ export default function RecordPage() {
     const base = BASE_S[lab] * (phaseAt(lab, count - 1).fast ? 0.65 : 1);
     const ms = signStart.current ? Date.now() - signStart.current - 150 : 0;
     if (base && ms && (ms > base * 1900 || ms < base * 450)) say(ms > base * 1900 ? "too long, two signs? undo" : "too short, undo?");
+    if (randomRef.current) {
+      const pr = prompt.current;
+      pr.left -= 1;
+      const ok = (l: string | null) => l && pr.style && (next[l] ?? 0) < targetOf(l) && same(phaseAt(l, next[l] ?? 0), pr.style);
+      let cur = ok(pr.next) && pr.left > 0 ? pr.next : null;
+      if (!cur && pr.left > 0 && pr.style) cur = pickLabel(next, pr.style, [lab]);
+      if (!cur) {
+        const prev = pr.style;
+        cur = startBlock(next, [lab]);
+        if (!cur) return beep(2, 1320);
+        const now = prompt.current.style;
+        if (prev && now && !same(prev, now)) {
+          beep(3, 660);
+          setPaused(true);
+          setTimeout(() => setPaused(false), PAUSE_MS);
+        } else beep();
+      } else {
+        pr.next = pickLabel(next, pr.style!, [cur]);
+        setUpNext(pr.next);
+        beep();
+      }
+      setLabel(cur);
+      return;
+    }
     if (lab === labelRef.current && count < targetOf(lab) && phaseAt(lab, count).start === count) {
       // new phase: short pause in saving so there is time to change the way of signing
       beep(3, 660);
@@ -162,7 +239,7 @@ export default function RecordPage() {
     setPaused(true);
     setLabel(todo);
     setTimeout(() => setPaused(false), PAUSE_MS);
-  }, []);
+  }, [startBlock]);
 
   const endSentence = useCallback(() => {
     clearTimeout(sentenceTimer.current);
@@ -235,7 +312,8 @@ export default function RecordPage() {
   const nextLabel = () => setLabel(RECORD_ORDER[(RECORD_ORDER.indexOf(label) + 1) % RECORD_ORDER.length]);
   const current = counts[label] ?? 0;
   const phase = phaseAt(label, current);
-  const chain = chainOverride?.label === label ? chainOverride.on : phase.chain;
+  const style = random && blockStyle ? blockStyle : phase;
+  const chain = chainOverride?.label === label ? chainOverride.on : style.chain;
   const btn = "rounded-lg px-3 py-2 font-medium";
 
   return (
@@ -280,9 +358,25 @@ export default function RecordPage() {
               signer
               <input value={signer} onChange={(e) => setSigner(e.target.value)} className="rounded border bg-white px-2 py-1 text-zinc-900" />
             </label>
+            <label className="flex items-center gap-2 rounded bg-sky-100 p-2 text-sm font-semibold text-zinc-900">
+              <input
+                type="checkbox"
+                checked={random}
+                onChange={(e) => {
+                  randomRef.current = e.target.checked;
+                  setRandom(e.target.checked);
+                  prompt.current.style = null;
+                  if (e.target.checked) {
+                    const first = startBlock(countsRef.current, []);
+                    if (first) setLabel(first);
+                  }
+                }}
+              />
+              random signs (the page picks the next sign after every take)
+            </label>
             <label className={`flex items-center gap-2 rounded p-2 text-sm text-zinc-900 ${chain ? "bg-violet-300 font-semibold" : "bg-zinc-200 font-semibold"}`}>
               <input type="checkbox" checked={chain} onChange={(e) => setChainOverride({ label, on: e.target.checked })} />
-              {phase.fast && <b className="text-red-700">FAST · </b>}
+              {style.fast && <b className="text-red-700">FAST · </b>}
               {chain
                 ? "CONTINUOUS: hands stay up, ½ s stop in the air = one sample (stop before lowering)"
                 : "LOWERED: hands down between takes"}
@@ -306,13 +400,14 @@ export default function RecordPage() {
             >
               {paused && <div className="text-sm font-semibold text-sky-800">get ready…</div>}
               {current < targetOf(label) ? (
-                <div className={`rounded-lg px-2 py-1 text-xl font-bold text-white ${phase.fast ? "bg-red-600" : chain ? "bg-violet-600" : "bg-zinc-700"}`}>
-                  {phaseName(phase).toUpperCase()} · {phaseLeft(label, current)} left
+                <div className={`rounded-lg px-2 py-1 text-xl font-bold text-white ${style.fast ? "bg-red-600" : chain ? "bg-violet-600" : "bg-zinc-700"}`}>
+                  {phaseName(style).toUpperCase()}{random ? "" : ` · ${phaseLeft(label, current)} left`}
                 </div>
               ) : (
                 <div className="rounded-lg bg-green-600 px-2 py-1 text-xl font-bold text-white">DONE</div>
               )}
-              <div className="text-2xl font-semibold">{label}</div>
+              <div className={random ? "text-6xl font-black tracking-wide" : "text-2xl font-semibold"}>{label}</div>
+              {random && upNext && <div className="text-lg text-zinc-600">next: <b>{upNext}</b></div>}
               <div className="text-7xl font-bold tabular-nums">{current}</div>
               <div className="text-sm text-zinc-600">target {targetOf(label)}</div>
               {takeMs > 0 && (
