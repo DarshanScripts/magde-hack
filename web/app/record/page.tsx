@@ -11,7 +11,7 @@ const SERVICE_URL = SIGN_WS_URL.replace(/^ws/, "http").replace(/\/ws$/, "");
 const TARGET = 25;
 const NONE_TARGET = 40;
 const EXTRA = ["KOPF", "BAUCH", "FIEBER", "VORMITTAG", "ABEND", "OKAY", "NICHT", "MOECHTEN",
-  "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS", "SIEBEN"];
+  "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS", "SIEBEN", "ACHT", "NEUN", "ZEHN"];
 const RECORD_ORDER = [...labels.p0, ...EXTRA, labels.none];
 // median length of the first (normal-speed) session per sign, seconds
 const BASE_S: Record<string, number> = {
@@ -26,6 +26,9 @@ const HINTS: Record<string, string> = {
   FUENF: "Open hand, all five fingers spread.",
   SECHS: "Open dominant hand (5) + thumb of the other hand.",
   SIEBEN: "Open dominant hand (5) + thumb and index of the other hand.",
+  ACHT: "Open dominant hand (5) + thumb, index and middle of the other hand.",
+  NEUN: "Open dominant hand (5) + four fingers (no thumb) of the other hand.",
+  ZEHN: "Both hands open (5 + 5).",
 };
 const PAUSE_MS = 2500;
 const SENTENCE_GAP_MS = 4000;
@@ -61,6 +64,7 @@ export default function RecordPage() {
   const [history, setHistory] = useState<Token[]>([]);
   const [status, setStatus] = useState<SignStatus>({ state: "rest", fps: 0, online: false });
   const [takeMs, setTakeMs] = useState(0);
+  const [chain, setChain] = useState(false);
   const signStart = useRef(0);
   const onStatus = useCallback((s: SignStatus) => {
     if (s.state === "signing" && !signStart.current) signStart.current = Date.now();
@@ -177,6 +181,7 @@ export default function RecordPage() {
         mode={paused ? "infer" : mode}
         recordLabel={label}
         signer={signer}
+        chain={chain}
         onToken={onToken}
         onStatus={onStatus}
         onRecorded={onRecorded}
@@ -205,6 +210,10 @@ export default function RecordPage() {
             <label className="flex flex-col gap-1 text-sm">
               signer
               <input value={signer} onChange={(e) => setSigner(e.target.value)} className="rounded border bg-white px-2 py-1 text-zinc-900" />
+            </label>
+            <label className="flex items-center gap-2 rounded bg-violet-100 p-2 text-sm text-zinc-900">
+              <input type="checkbox" checked={chain} onChange={(e) => setChain(e.target.checked)} />
+              continuous: hands stay up, brief stop in the air between takes = one sample each
             </label>
             <label className="flex flex-col gap-1 text-sm">
               label

@@ -45,7 +45,7 @@ INFO = {
     "MOECHTEN": ("would like (video: mögen)", "TERMIN MOECHTEN → „Ich möchte einen Termin.“"),
 }
 EXTRA = ["KOPF", "BAUCH", "FIEBER", "VORMITTAG", "ABEND", "OKAY", "NICHT", "MOECHTEN",
-         "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS", "SIEBEN"]
+         "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS", "SIEBEN", "ACHT", "NEUN", "ZEHN"]
 NUMBERS = {
     "EINS": "Thumb out (fist), palm towards you. Hold at the chest with a short downward tap, not a thumbs-up gesture.",
     "ZWEI": "Thumb + index finger out, palm towards you.",
@@ -54,6 +54,9 @@ NUMBERS = {
     "FUENF": "Open hand, all five fingers spread.",
     "SECHS": "Open dominant hand (5) + thumb of the other hand.",
     "SIEBEN": "Open dominant hand (5) + thumb and index of the other hand.",
+    "ACHT": "Open dominant hand (5) + thumb, index and middle of the other hand.",
+    "NEUN": "Open dominant hand (5) + four fingers (no thumb) of the other hand.",
+    "ZEHN": "Both hands open (5 + 5).",
 }
 
 
@@ -88,6 +91,7 @@ def key_frames(video: Path, label: str) -> list[str]:
 FINGERS = {
     "EINS": ("10000", None), "ZWEI": ("11000", None), "DREI": ("11100", None), "VIER": ("01111", None),
     "FUENF": ("11111", None), "SECHS": ("11111", "10000"), "SIEBEN": ("11111", "11000"),
+    "ACHT": ("11111", "11100"), "NEUN": ("11111", "01111"), "ZEHN": ("11111", "11111"),
 }
 
 
@@ -162,7 +166,7 @@ back to "rest" once. If one sign flips it twice, or not at all, tell the agent.<
 <table border="1" cellpadding="4" style="border-collapse:collapse">
 <tr><th>Group</th><th>Target</th><th>What</th></tr>
 <tr><td>15 core signs</td><td>35 (15 old + 20 new)</td><td>New takes <b>fast</b>: about 65% of your normal length</td></tr>
-<tr><td>15 new words (below)</td><td>25</td><td>Mix normal and fast</td></tr>
+<tr><td>18 new words (below)</td><td>25</td><td>Mix normal and fast</td></tr>
 <tr><td>_NONE</td><td>40 (34 done)</td><td>Everyday non-sign movements</td></tr>
 </table>
 <ul>
@@ -196,7 +200,7 @@ padding:0 6px;border-radius:4px;font-size:12px}}
 \n.nums figure{{background:#f7f7f7;border-radius:8px;padding:6px}} .nums figcaption{{position:static;background:none;color:#333}}\n.credit{{font-size:12px;color:#777;margin:6px 0 0}} code{{background:#f3f3f3;padding:0 4px;border-radius:4px}}
 </style></head><body>
 <h1>DGS practice sheet</h1>
-<p>15 core signs (p0) and 15 new words. Videos loop; use 0.5× and mirror to learn.</p>
+<p>15 core signs (p0) and 18 new words. Videos loop; use 0.5× and mirror to learn.</p>
 <nav>{nav}</nav>
 {guide}
 <h2>Core signs (record these)</h2>

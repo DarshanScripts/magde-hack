@@ -26,7 +26,8 @@ MIN_SEGMENT_MS = 200
 MAX_SEGMENT_MS = 3000
 SPLIT_SPEED = 0.7      # median speed of the last SPLIT_WINDOW frames below this = pause candidate
 SPLIT_WINDOW = 5
-SPLIT_MIN_MS = 350     # a split-off sign must be at least this long
+SPLIT_MIN_MS = 500     # a split-off sign must be at least this long (inference, classifier-gated)
+CHAIN_MIN_MS = 550     # record mode, no classifier gate
 EURO_MIN_CUTOFF = 1.0
 EURO_BETA = 3.0
 EURO_D_CUTOFF = 1.0
@@ -189,11 +190,11 @@ class Segmenter:
         return seg if active_ms >= MIN_SEGMENT_MS else None
 
 
-    def pause_candidate(self):
-        """While signing with hands up: hands slowed down after at least SPLIT_MIN_MS of signing."""
+    def pause_candidate(self, min_ms=SPLIT_MIN_MS, speed=SPLIT_SPEED):
+        """While signing with hands up: hands slowed down after at least min_ms of signing."""
         return (self.state == "signing" and len(self.recent) == SPLIT_WINDOW
-                and float(np.median(self.recent)) < SPLIT_SPEED
-                and self.seg[-1]["t"] - self.t_start >= SPLIT_MIN_MS)
+                and float(np.median(self.recent)) < speed
+                and self.seg[-1]["t"] - self.t_start >= min_ms)
 
     def cut(self):
         """Ends the current sign here (it was classified) and starts the next one, still signing."""

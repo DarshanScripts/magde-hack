@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from core import MODELS, ROOT, NonManual, Recognizer, Segmenter, load_labels
+from core import CHAIN_MIN_MS, MODELS, ROOT, NonManual, Recognizer, Segmenter, load_labels
 
 DATA = Path(os.environ.get("SIGN_DATA", ROOT / "data"))
 DUMP = os.environ.get("SIGN_DUMP")
@@ -16,6 +16,7 @@ P0, P1, NONE = load_labels()
 LABELS = [*P0, *P1, NONE]
 LOCAL_ORIGIN = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 REPEAT_MS = 400
+CHAIN_TAIL_MS = 600
 SPLIT_CONF = float(os.environ.get("SIGN_SPLIT_CONF", 0.8))  # confidence needed to cut a sign while hands stay up
 # Integration testing without a trained model: each detected sign emits the next gloss of this list.
 FAKE = [g for g in os.environ.get("SIGN_FAKE", "").split(",") if g]
@@ -104,7 +105,7 @@ async def ws_endpoint(ws: WebSocket):
     nm = NonManual()
     last_token = ("", 0)
     fake_i = 0
-    mode, label, signer = "infer", None, None
+    mode, label, signer, chain = "infer", None, None, False
     times: deque[float] = deque()
     last_state, last_status = None, 0.0
     dump = open(DUMP, "a") if DUMP else None
@@ -146,7 +147,14 @@ async def ws_endpoint(ws: WebSocket):
                 if seg.state == "rest" and not done:
                     nm.observe_rest(m)
                 if done and mode == "record":
-                    save(label, signer, done)
+                    # after a mid-air cut the rest is usually just lowering the hands: keep it only if sign-long
+                    if not split or done[-1]["t"] - done[0]["t"] >= CHAIN_TAIL_MS:
+                        save(label, signer, done)
+                        await ws.send_json({"type": "recorded", "label": label, "count": count(label)})
+                    split = False
+                elif mode == "record" and chain and seg.pause_candidate(CHAIN_MIN_MS):
+                    save(label, signer, seg.cut())
+                    split = True
                     await ws.send_json({"type": "recorded", "label": label, "count": count(label)})
                 elif done and rec is None and not FAKE:
                     await error("model not loaded")
@@ -173,6 +181,7 @@ async def ws_endpoint(ws: WebSocket):
 
             elif kind == "mode":
                 seg.reset()
+                split = False
                 last_status = 0.0
                 if m.get("mode") != "record":
                     mode = "infer"
@@ -182,7 +191,7 @@ async def ws_endpoint(ws: WebSocket):
                     mode = "infer"
                     await error(f"record mode needs a known label and a signer, got {m.get('label')!r}/{name!r}")
                 else:
-                    mode, label, signer = "record", m["label"], name
+                    mode, label, signer, chain = "record", m["label"], name, m.get("chain") is True
 
             elif kind == "reset":
                 seg.reset()
