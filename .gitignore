@@ -10,8 +10,8 @@ node_modules/
 .venv/
 __pycache__/
 
-# trained models (regenerate with sign/train.py)
-sign/models/
+# recorded samples (personal; stay on the recording laptop)
+sign/data/
 
 # practice sheet media (SignDict licenses; regenerate with sign/make_practice.py)
 practice/

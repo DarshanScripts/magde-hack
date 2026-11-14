@@ -18,8 +18,9 @@ DGS (German Sign Language) → German voice over a browser-to-browser LiveKit ca
 - [x] F8 live (`feat/sign-live`): server loads `sign/models/` (reloads on new WebSocket if retrained), emits tokens with `question` ("yn" brows up / "wh" brows down vs per-signer rest baseline) and `negation` (≥2 yaw reversals ≥6°). `/record` shows SignDict reference videos per label, model status, flags, token history.
 - Verified only on synthetic data: record via server → train (hold-out other signer 27/28) → live inference 8/8 with correct flags; inference 8.5 ms/sign on CPU.
 - [x] Tuning session on a real `SIGN_DUMP` (see Decisions).
-- [ ] Real recording session (user), train, live check.
-- [ ] Integration with Lane A (F9 imports `SignCamera`, uses flags), then merge to `main` after user approval.
+- [x] Recorded 15 × 15 p0 + 34 `_NONE` (adi), trained v0, live check: works, still some mistakes.
+- [ ] Retrain with more/varied data later.
+- [ ] Integration with Lane A: handoff branch `feat/sign-integration` + `LANE_A_HANDOFF.md` (utterance end 4 s / Enter, not 1.5 s). Merge to `main` only after user approval.
 
 Lane B branches are stacked (camera → service → training → live); `feat/sign-live` contains everything. `AGENTS.md` updates ride on the current feature branch.
 
@@ -48,7 +49,7 @@ Meanwhile the user learns the 15 p0 signs (one variant each, from DW-DGS or Spre
 - Face (added at user request, plan had it post-MVP): `SignCamera` runs FaceLandmarker (blendshapes + transformation matrix) and sends `face: {bs: {29 blendshapes}, rot: [yaw, pitch, roll] deg}` per frame; saved in samples. Hands every frame, pose/face alternate every 3rd frame (face costs 18 ms on GPU). Overlay shows brows/eyes/lips and a "brows ↑/↓" badge (threshold 0.4, untuned). Plan: face features feed the classifier (mouthing), and F8 derives a non-manual marker (question/negation) per token; that needs an optional field on `Token` in `contract.ts` → coordinate with Lane A on `main`.
 - Training data: no usable public DGS set for our vocabulary. `fhswf/dgs-pose` (HF) is no longer public; `fhswf/sign-language-avatar-gloss-dgs` (SignDict, 4182 words) has only 1–3 clips per word, mostly CC BY-NC-SA → used only as reference videos (`web/lib/signRefs.json`, served from `assets.wishlephant.com/signdict/videos/<key>.mp4`, with credit + license shown). Training uses the user's own recordings. Optional later: pretrain on Kaggle ASL ISLR (CC-BY 4.0, 54 GB, needs Kaggle API key).
 - `HF_TOKEN` is in `.env` (user `adityaladawa09`, fine-grained read).
-- `sign/models/` is gitignored (regenerate with `train.py`). `SIGN_MODELS` / `SIGN_DATA` env vars override folders (used by tests).
+- `sign/models/` is committed (v0: cnn1d, 15×15 samples of adi + 34 `_NONE`, hold-out 48/48 same session, threshold 0.6 / margin 0.3; live still makes mistakes → retrain later, replace the two files). `sign/data/` (recordings) is gitignored and stays on this laptop. `SIGN_MODELS` / `SIGN_DATA` env vars override folders (used by tests).
 - Lane B additions beyond §6.3 (internal to `/record` ↔ service, no cross-lane impact): `POST /undo` deletes the last sample saved by this server process; WebSocket and `/undo` reject non-localhost origins; `SIGN_DATA` env var overrides `sign/data` (used for tests).
 - `/record` page: record/infer toggle, signer (default `adi`), label dropdown, big counter (target 15), beep + flash on each saved sample, undo, next label, counts list.
 

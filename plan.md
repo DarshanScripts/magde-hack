@@ -467,7 +467,7 @@ Done when: on `/record` in infer mode, each p0 sign shows the correct label ≤ 
    - **Bottom bar:** before the call, a dropdown with the 2 `MOCK_CONTACTS` + "Anrufen". During the call, the contact name, a timer and a red "Auflegen". Both contacts join `ROOM_NAME`.
 2. Loop:
    1. `onToken` → append a chip. `"?"` shows as a grey chip and is not sent.
-   2. 1.5 s after the last token (or on Enter) → `POST /api/sentence` with the tokens, the last 6 turns and the profile.
+   2. 4 s after the last token (or on Enter; the signer lowers the hands between signs, measured gaps 2.5 s median, up to ~4.6 s) → `POST /api/sentence` with the tokens, the last 6 turns and the profile.
       Utterance flags from the tokens: `question` = the last non-empty `question` among the tokens (else `null`); `negation` = any token has `negation`.
       Show them on the chips (e.g. "?" / "¬" badge) so the signer sees what was detected.
    3. Add caption `{ who: "me", text, gloss }` → `voice.speak(text)` → push `Turn { who: "me" }` → clear the chips.
