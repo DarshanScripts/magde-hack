@@ -1,27 +1,38 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import labels from "@/lib/labels.json";
 import refs from "@/lib/signRefs.json";
 import { SIGN_WS_URL, type SignStatus, type Token } from "@/lib/contract";
 
 const SignCamera = dynamic(() => import("@/components/SignCamera"), { ssr: false });
 const SERVICE_URL = SIGN_WS_URL.replace(/^ws/, "http").replace(/\/ws$/, "");
-const ALL_LABELS = [...labels.p0, ...labels.p1, labels.none];
 const TARGET = 15;
+const NONE_TARGET = 30;
+const RECORD_ORDER = [...labels.p0, labels.none]; // p1 (numbers, extras) not recorded for now
+const PAUSE_MS = 2500;
+const SENTENCE_GAP_MS = 4000;
+
+function flags(tokens: Token[]) {
+  const question = [...tokens].reverse().find((t) => t.question)?.question ?? null;
+  return { question, negation: tokens.some((t) => t.negation) };
+}
+const targetOf = (l: string) => (l === labels.none ? NONE_TARGET : TARGET);
 const REFS: Record<string, { video: string; word: string; credit: string; license: string }> = refs;
 
-function beep() {
+function beep(times = 1, freq = 880) {
   const ctx = new AudioContext();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.frequency.value = 880;
-  gain.gain.value = 0.1;
-  osc.connect(gain).connect(ctx.destination);
-  osc.onended = () => ctx.close();
-  osc.start();
-  osc.stop(ctx.currentTime + 0.12);
+  for (let i = 0; i < times; i++) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = freq;
+    gain.gain.value = 0.1;
+    osc.connect(gain).connect(ctx.destination);
+    if (i === times - 1) osc.onended = () => ctx.close();
+    osc.start(ctx.currentTime + i * 0.2);
+    osc.stop(ctx.currentTime + i * 0.2 + 0.12);
+  }
 }
 
 export default function RecordPage() {
@@ -34,6 +45,17 @@ export default function RecordPage() {
   const [status, setStatus] = useState<SignStatus>({ state: "rest", fps: 0, online: false });
   const [token, setToken] = useState<Token | null>(null);
   const [flash, setFlash] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [buffer, setBuffer] = useState<Token[]>([]);
+  const [sentences, setSentences] = useState<Token[][]>([]);
+  const bufferRef = useRef<Token[]>([]);
+  const sentenceTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const labelRef = useRef(label);
+  const countsRef = useRef(counts);
+  useEffect(() => {
+    labelRef.current = label;
+    countsRef.current = counts;
+  });
 
   const refreshCounts = useCallback(async () => {
     try {
@@ -54,11 +76,63 @@ export default function RecordPage() {
   }, [refreshCounts]);
 
   const onRecorded = useCallback((lab: string, count: number) => {
-    setCounts((c) => ({ ...c, [lab]: count }));
-    beep();
+    const next = { ...countsRef.current, [lab]: count };
+    setCounts(next);
     setFlash(true);
     setTimeout(() => setFlash(false), 300);
+    const todo = RECORD_ORDER.find((l) => (next[l] ?? 0) < targetOf(l));
+    if (lab !== labelRef.current || count < targetOf(lab) || !todo) return beep();
+    // target reached: pause saving, switch to the next unfinished label, then resume
+    beep(2, 1320);
+    setPaused(true);
+    setLabel(todo);
+    setTimeout(() => setPaused(false), PAUSE_MS);
   }, []);
+
+  const endSentence = useCallback(() => {
+    clearTimeout(sentenceTimer.current);
+    const b = bufferRef.current;
+    if (!b.length) return;
+    bufferRef.current = [];
+    setBuffer([]);
+    setSentences((s) => [...s.slice(-19), b]);
+  }, []);
+
+  const onToken = useCallback(
+    (t: Token) => {
+      setToken(t);
+      setHistory((h) => [...h.slice(-11), t]);
+      if (t.label === "?") return;
+      bufferRef.current = [...bufferRef.current, t];
+      setBuffer(bufferRef.current);
+      clearTimeout(sentenceTimer.current);
+      sentenceTimer.current = setTimeout(endSentence, SENTENCE_GAP_MS);
+    },
+    [endSentence],
+  );
+
+  useEffect(() => {
+    if (mode !== "infer") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (e.key === "Enter") endSentence();
+      if (e.key === "Backspace") {
+        bufferRef.current = bufferRef.current.slice(0, -1);
+        setBuffer(bufferRef.current);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode, endSentence]);
+
+  const resetLabel = async () => {
+    if (!confirm(`Delete all ${counts[label] ?? 0} ${label} samples of "${signer}"?`)) return;
+    const res = await fetch(`${SERVICE_URL}/reset/${label}?signer=${encodeURIComponent(signer)}`, { method: "POST" }).catch(() => null);
+    if (res?.ok) {
+      const { count } = await res.json();
+      setCounts((c) => ({ ...c, [label]: count }));
+    }
+  };
 
   const undo = async () => {
     const res = await fetch(`${SERVICE_URL}/undo`, { method: "POST" }).catch(() => null);
@@ -68,20 +142,17 @@ export default function RecordPage() {
     }
   };
 
-  const nextLabel = () => setLabel(ALL_LABELS[(ALL_LABELS.indexOf(label) + 1) % ALL_LABELS.length]);
+  const nextLabel = () => setLabel(RECORD_ORDER[(RECORD_ORDER.indexOf(label) + 1) % RECORD_ORDER.length]);
   const current = counts[label] ?? 0;
   const btn = "rounded-lg px-3 py-2 font-medium";
 
   return (
-    <main className="mx-auto grid w-full max-w-7xl gap-6 p-6 lg:grid-cols-[1fr_380px]">
+    <main className="mx-auto grid min-h-screen w-full max-w-7xl gap-6 bg-white p-6 text-zinc-900 lg:grid-cols-2">
       <SignCamera
-        mode={mode}
+        mode={paused ? "infer" : mode}
         recordLabel={label}
         signer={signer}
-        onToken={(t) => {
-          setToken(t);
-          setHistory((h) => [...h.slice(-11), t]);
-        }}
+        onToken={onToken}
         onStatus={setStatus}
         onRecorded={onRecorded}
       />
@@ -108,12 +179,12 @@ export default function RecordPage() {
           <>
             <label className="flex flex-col gap-1 text-sm">
               signer
-              <input value={signer} onChange={(e) => setSigner(e.target.value)} className="rounded border px-2 py-1" />
+              <input value={signer} onChange={(e) => setSigner(e.target.value)} className="rounded border bg-white px-2 py-1 text-zinc-900" />
             </label>
             <label className="flex flex-col gap-1 text-sm">
               label
-              <select value={label} onChange={(e) => setLabel(e.target.value)} className="rounded border px-2 py-1 text-lg">
-                {Object.entries({ p0: labels.p0, p1: labels.p1, none: [labels.none] }).map(([group, list]) => (
+              <select value={label} onChange={(e) => setLabel(e.target.value)} className="rounded border bg-white px-2 py-1 text-lg text-zinc-900">
+                {Object.entries({ p0: labels.p0, none: [labels.none] }).map(([group, list]) => (
                   <optgroup key={group} label={group}>
                     {list.map((l) => (
                       <option key={l} value={l}>
@@ -125,11 +196,12 @@ export default function RecordPage() {
               </select>
             </label>
             <div
-              className={`rounded-xl p-4 text-center transition-colors ${flash ? "bg-green-300" : current >= TARGET ? "bg-green-100" : "bg-zinc-100"}`}
+              className={`rounded-xl p-4 text-center transition-colors ${paused ? "bg-sky-200" : flash ? "bg-green-300" : current >= targetOf(label) ? "bg-green-100" : "bg-zinc-100"}`}
             >
+              {paused && <div className="text-sm font-semibold text-sky-800">next sign: get ready…</div>}
               <div className="text-2xl font-semibold">{label}</div>
               <div className="text-7xl font-bold tabular-nums">{current}</div>
-              <div className="text-sm text-zinc-600">target {TARGET}</div>
+              <div className="text-sm text-zinc-600">target {targetOf(label)}</div>
             </div>
             {REFS[label] && (
               <figure className="flex flex-col gap-1">
@@ -147,24 +219,30 @@ export default function RecordPage() {
                 next label
               </button>
             </div>
+            <button onClick={resetLabel} disabled={!current} className={`${btn} bg-red-600 text-white disabled:opacity-40`}>
+              reset {label} (delete all {current})
+            </button>
           </>
         ) : (
-          <div className="rounded-xl bg-zinc-100 p-4">
-            <div className="text-sm text-zinc-600">last prediction</div>
-            <div className="flex items-center gap-2 text-5xl font-bold">
+          <div className="rounded-xl bg-zinc-900 p-4 text-white">
+            <div className="text-sm text-zinc-400">last prediction</div>
+            <div
+              className={`flex flex-wrap items-center gap-2 py-2 text-6xl font-bold ${!token ? "text-zinc-500" : token.label === "?" ? "text-amber-400" : "text-green-400"}`}
+            >
               {token?.label ?? "–"}
+              {token && <span className="text-2xl font-medium text-zinc-300">{Math.round(token.conf * 100)}%</span>}
               {token?.question && <span className="rounded bg-fuchsia-600 px-2 text-xl text-white">{token.question === "yn" ? "? ja/nein" : "? W-Frage"}</span>}
               {token?.negation && <span className="rounded bg-red-600 px-2 text-xl text-white">¬ nicht</span>}
             </div>
             {token?.top?.map(([l, p]) => (
-              <div key={l} className="flex justify-between font-mono text-sm">
+              <div key={l} className="flex justify-between font-mono text-base text-zinc-200">
                 <span>{l}</span>
                 <span>{p.toFixed(2)}</span>
               </div>
             ))}
             <div className="mt-3 flex flex-wrap gap-1">
               {history.map((t, i) => (
-                <span key={i} className={`rounded px-2 py-0.5 text-sm ${t.label === "?" ? "bg-zinc-300" : "bg-blue-600 text-white"}`}>
+                <span key={i} className={`rounded px-2 py-0.5 text-base font-semibold ${t.label === "?" ? "bg-amber-400 text-zinc-900" : "bg-blue-500 text-white"}`}>
                   {t.label}
                   {t.question ? "?" : ""}
                   {t.negation ? "¬" : ""}
@@ -174,15 +252,55 @@ export default function RecordPage() {
           </div>
         )}
 
+        {mode === "infer" && (
+          <div className="rounded-xl border-2 border-blue-500 p-4">
+            <div className="flex items-center justify-between text-sm text-zinc-600">
+              <span>current sentence (ends after {SENTENCE_GAP_MS / 1000} s pause or Enter · Backspace removes last)</span>
+            </div>
+            <div className="min-h-12 py-2 text-3xl font-bold text-blue-700">
+              {buffer.length ? <Gloss tokens={buffer} /> : <span className="text-zinc-400">sign…</span>}
+            </div>
+            <button onClick={endSentence} disabled={!buffer.length} className={`${btn} w-full bg-blue-600 text-white disabled:opacity-40`}>
+              end sentence (Enter)
+            </button>
+            {sentences.length > 0 && (
+              <div className="mt-3 flex flex-col gap-1 border-t pt-2">
+                <div className="flex justify-between text-sm text-zinc-600">
+                  <span>sentences</span>
+                  <button onClick={() => setSentences([])} className="underline">
+                    clear
+                  </button>
+                </div>
+                {[...sentences].reverse().map((s, i) => (
+                  <div key={sentences.length - i} className="text-xl font-semibold">
+                    <Gloss tokens={s} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="max-h-80 overflow-auto rounded-xl border p-3 font-mono text-sm">
-          {ALL_LABELS.map((l) => (
+          {RECORD_ORDER.map((l) => (
             <div key={l} className={`flex justify-between ${l === label ? "font-bold" : ""}`}>
               <span>{l}</span>
-              <span className={(counts[l] ?? 0) >= TARGET ? "text-green-700" : ""}>{counts[l] ?? 0}</span>
+              <span className={(counts[l] ?? 0) >= targetOf(l) ? "text-green-700" : ""}>{counts[l] ?? 0}</span>
             </div>
           ))}
         </div>
       </aside>
     </main>
+  );
+}
+
+function Gloss({ tokens }: { tokens: Token[] }) {
+  const { question, negation } = flags(tokens);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      {tokens.map((t) => t.label).join(" · ")}
+      {question && <span className="rounded bg-fuchsia-600 px-2 text-base text-white">{question === "yn" ? "? ja/nein" : "? W-Frage"}</span>}
+      {negation && <span className="rounded bg-red-600 px-2 text-base text-white">¬ nicht</span>}
+    </span>
   );
 }
