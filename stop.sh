@@ -19,6 +19,7 @@ msys* | cygwin*)
     foreach (\$c in @(Get-NetTCPConnection -State Listen -LocalPort 8765,3000,4040 -ErrorAction SilentlyContinue)) {
       taskkill /PID \$c.OwningProcess /T /F *> \$null; \"stopped what was left on port \$(\$c.LocalPort)\"
     }
+    exit 0
   "
   ;;
 *)
