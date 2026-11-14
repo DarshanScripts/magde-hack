@@ -49,7 +49,10 @@ Meanwhile the user learns the 15 p0 signs (one variant each, from DW-DGS or Spre
 - Chrome defaults to the Intel iGPU. To run MediaPipe on the GTX 1050, launch a separate Chrome via PRIME offload under XWayland (Wayland + NVIDIA offload crashes Chrome's GPU process):
   `prime-run google-chrome-stable --ozone-platform=x11 --user-data-dir=/tmp/chrome-nvidia http://localhost:3000/record`
   Verify with `chrome://gpu` (GL_RENDERER = NVIDIA) or `/proc/<gpu-process pid>/fd` → `/dev/nvidia0`. `nvidia-smi` does not list Chrome (sandbox PID namespace).
-- Webcam (`/dev/video0`): 1280×720 is 30 fps only as MJPG, 10 fps as YUYV; 640×480 is 30 fps in both. `SignCamera` requests 640×480 (MediaPipe downsizes internally anyway).
+- Webcam (`/dev/video0`): 1280×720 is 30 fps only as MJPG, 10 fps as YUYV; 640×480 is 30 fps in both. `SignCamera` requests 640×480 (MediaPipe downsizes internally anyway). Verified camera delivers 30.0 fps.
+- MediaPipe cost on GTX 1050 (in-browser, per frame): hands 12 ms, pose lite 17 ms on GPU; CPU delegate 98 / 53 ms. Pose runs every 2nd frame (`POSE_EVERY`); `/record` reaches ~20–27 fps (Intel iGPU in Brave was ~20). The user's daily browser is Brave (Wayland, Intel); the GPU Chrome must be a separate instance, and only one app can hold the webcam.
+- Chrome installed: 151.0.7922.137 (AUR `google-chrome`); latest stable 157. Updating needs sudo: `yay -S google-chrome` (the user runs it).
+- Agent can measure the page itself: launch the GPU Chrome with `--remote-debugging-port=9222 --use-fake-ui-for-media-stream` and use the DevTools protocol (`SystemInfo.getInfo`, `Runtime.evaluate`) via `sign/.venv/bin/python` + `websockets`.
 - When killing processes by pattern, use a bracket pattern (`pkill -f "[/]opt/google/..."`) or the shell kills itself.
 - ngrok 3.39.13 in `~/.local/bin`, authtoken configured. One session per token.
 - Node 26, npm 11, `uv` available.
