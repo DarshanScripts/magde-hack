@@ -66,8 +66,8 @@ function browState(f: Face | null): "up" | "down" | null {
   return up > BROW_THRESHOLD && up > down ? "up" : down > BROW_THRESHOLD ? "down" : null;
 }
 
-const modeMessage = ({ mode, recordLabel, signer }: SignCameraProps) =>
-  JSON.stringify(mode === "record" ? { type: "mode", mode, label: recordLabel, signer } : { type: "mode", mode });
+const modeMessage = ({ mode, recordLabel, signer, chain }: SignCameraProps) =>
+  JSON.stringify(mode === "record" ? { type: "mode", mode, label: recordLabel, signer, chain: !!chain } : { type: "mode", mode });
 
 async function withFallback<T>(make: (delegate: "GPU" | "CPU") => Promise<T>): Promise<T> {
   try {
@@ -79,7 +79,7 @@ async function withFallback<T>(make: (delegate: "GPU" | "CPU") => Promise<T>): P
 }
 
 export default function SignCamera(props: SignCameraProps) {
-  const { mode, recordLabel, signer } = props;
+  const { mode, recordLabel, signer, chain } = props;
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -113,8 +113,8 @@ export default function SignCamera(props: SignCameraProps) {
 
   useEffect(() => {
     const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN) ws.send(modeMessage({ mode, recordLabel, signer }));
-  }, [mode, recordLabel, signer]);
+    if (ws?.readyState === WebSocket.OPEN) ws.send(modeMessage({ mode, recordLabel, signer, chain }));
+  }, [mode, recordLabel, signer, chain]);
 
   useEffect(() => {
     let closed = false;
@@ -195,6 +195,10 @@ export default function SignCamera(props: SignCameraProps) {
             baseOptions: { modelAssetPath: HAND_MODEL, delegate },
             runningMode: "VIDEO",
             numHands: 2,
+            // lower than the 0.5 defaults so fast, slightly blurred hands are not dropped
+            minHandDetectionConfidence: 0.3,
+            minHandPresenceConfidence: 0.3,
+            minTrackingConfidence: 0.3,
           }),
         ),
         withFallback((delegate) =>

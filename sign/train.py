@@ -25,10 +25,10 @@ DATA = Path(os.environ.get("SIGN_DATA", ROOT / "data"))
 OUT = MODELS
 MIN_SAMPLES = 3
 HOLDOUT_LAST = 3
-AUG_PER_SAMPLE = 30
-TARGET_PASS = 0.9
+AUG_PER_SAMPLE = int(os.environ.get("SIGN_AUG", 20))
+TARGET_PASS = 0.95
 MAX_THRESHOLD = 0.7
-MAX_MARGIN = 0.3
+MAX_MARGIN = 0.2
 
 
 def load(labels):
@@ -42,7 +42,16 @@ def load(labels):
     return items
 
 
-def split(items, holdout_signer):
+def ts(i):
+    return int(i["file"].rsplit("_", 1)[-1].split(".")[0])
+
+
+def split(items, holdout_signer, after=0):
+    if after:  # new session = test for labels that also have old samples; others: last 3 as usual
+        old = {i["label"] for i in items if ts(i) <= after}
+        tr, te = split([i for i in items if i["label"] not in old], None)
+        return tr + [i for i in items if i["label"] in old and ts(i) <= after], te + [
+            i for i in items if i["label"] in old and ts(i) > after]
     if holdout_signer:
         return [i for i in items if i["signer"] != holdout_signer], [i for i in items if i["signer"] == holdout_signer]
     by = defaultdict(list)
@@ -144,6 +153,7 @@ def report(name, probs, y, classes):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--holdout-signer")
+    ap.add_argument("--holdout-after", type=int, default=0, help="ms timestamp: later samples of known labels = test")
     ap.add_argument("--epochs", type=int, default=120)
     ap.add_argument("--no-final", action="store_true")
     args = ap.parse_args()
@@ -160,7 +170,7 @@ def main():
 
     rng = np.random.default_rng(0)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    train, test = split(items, args.holdout_signer)
+    train, test = split(items, args.holdout_signer, args.holdout_after)
     t0 = time.time()
     x_tr, y_tr = build(train, classes, rng, AUG_PER_SAMPLE)
     x_te, y_te = build(test, classes, rng, 0)

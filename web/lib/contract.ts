@@ -25,6 +25,7 @@ export type SignCameraProps = {             // F5 → F9 (the only cross-lane in
   mode: "infer" | "record";
   recordLabel?: string;
   signer?: string;
+  chain?: boolean;                        // record mode: also cut samples at mid-air pauses (continuous signing)
   onToken?: (t: Token) => void;
   onStatus?: (s: SignStatus) => void;
   onRecorded?: (label: string, count: number) => void;

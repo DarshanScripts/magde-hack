@@ -8,9 +8,26 @@ import { SIGN_WS_URL, type SignStatus, type Token } from "@/lib/contract";
 
 const SignCamera = dynamic(() => import("@/components/SignCamera"), { ssr: false });
 const SERVICE_URL = SIGN_WS_URL.replace(/^ws/, "http").replace(/\/ws$/, "");
-const TARGET = 15;
-const NONE_TARGET = 30;
-const RECORD_ORDER = [...labels.p0, labels.none]; // p1 (numbers, extras) not recorded for now
+const EXTRA = ["KOPF", "BAUCH", "FIEBER", "VORMITTAG", "ABEND", "OKAY", "NICHT", "MOECHTEN",
+  "EINS", "ZWEI", "DREI", "VIER", "FUENF", "SECHS", "SIEBEN", "ACHT", "NEUN", "ZEHN"];
+const RECORD_ORDER = [...labels.p0, ...EXTRA, labels.none];
+// median length of the first (normal-speed) session per sign, seconds
+const BASE_S: Record<string, number> = {
+  HALLO: 1.7, DANKE: 0.9, TSCHUESS: 1.0, JA: 0.8, NEIN: 0.9, WIEDERHOLEN: 1.2, NAME: 0.7, TERMIN: 1.6,
+  WOLLEN: 0.8, HEUTE: 1.05, MORGEN: 1.2, NACHMITTAG: 1.35, UHR: 1.2, UNTERSUCHUNG: 1.4, SCHMERZ: 2.4,
+};
+const HINTS: Record<string, string> = {
+  EINS: "Thumb up (fist, thumb out), palm towards you. Not a thumbs-up gesture: hold at chest, short downward tap.",
+  ZWEI: "Thumb + index finger out, palm towards you.",
+  DREI: "Thumb + index + middle finger out.",
+  VIER: "Four fingers out, thumb folded in.",
+  FUENF: "Open hand, all five fingers spread.",
+  SECHS: "Open dominant hand (5) + thumb of the other hand.",
+  SIEBEN: "Open dominant hand (5) + thumb and index of the other hand.",
+  ACHT: "Open dominant hand (5) + thumb, index and middle of the other hand.",
+  NEUN: "Open dominant hand (5) + four fingers (no thumb) of the other hand.",
+  ZEHN: "Both hands open (5 + 5).",
+};
 const PAUSE_MS = 2500;
 const SENTENCE_GAP_MS = 4000;
 
@@ -18,7 +35,64 @@ function flags(tokens: Token[]) {
   const question = [...tokens].reverse().find((t) => t.question)?.question ?? null;
   return { question, negation: tokens.some((t) => t.negation) };
 }
-const targetOf = (l: string) => (l === labels.none ? NONE_TARGET : TARGET);
+// Recording phases per label, in order: [takes, continuous (hands stay up), fast]
+type Phase = [number, boolean, boolean];
+const PHASES = (l: string): Phase[] =>
+  l === labels.none
+    ? [[34, false, false]] // already recorded
+    : labels.p0.includes(l)
+      ? [[15, false, false]] // 15 max; core signs already have them
+      : [[8, false, false], [7, true, false]]; // 15 max: 8 hands down (done), rest continuous
+const targetOf = (l: string) => PHASES(l).reduce((n, [k]) => n + k, 0);
+// phase for the next take; `start` = count at which it begins
+function say(text: string) {
+  if (typeof speechSynthesis === "undefined") return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-US";
+  u.rate = 1.1;
+  speechSynthesis.speak(u);
+}
+const phaseName = (p: { chain: boolean; fast: boolean }) => `${p.fast ? "fast, " : ""}${p.chain ? "continuous" : "hands down"}`;
+function phaseLeft(l: string, count: number) {
+  const p = phaseAt(l, count);
+  const k = PHASES(l).find((_, i, all) => all.slice(0, i).reduce((n, [x]) => n + x, 0) === p.start)?.[0] ?? 0;
+  return p.start + k - count;
+}
+type Style = { chain: boolean; fast: boolean };
+const BLOCK = 1000; // stay in one style until no label needs it (few switches)
+const same = (a: Style, b: Style) => a.chain === b.chain && a.fast === b.fast;
+// first style (in a fixed order) that some label still needs
+function pickStyle(counts: Record<string, number>): Style | null {
+  const left = new Map<string, number>();
+  for (const l of RECORD_ORDER) {
+    const n = counts[l] ?? 0;
+    if (n >= targetOf(l)) continue;
+    const p = phaseAt(l, n), key = `${p.chain}|${p.fast}`;
+    left.set(key, (left.get(key) ?? 0) + phaseLeft(l, n));
+  }
+  // order: hands down → continuous → fast (so every word gets basic data first if time runs out)
+  const best = ["false|false", "true|false", "false|true", "true|true"].filter((k) => left.has(k)).map((k) => [k])[0];
+  return best ? { chain: best[0].startsWith("true"), fast: best[0].endsWith("true") } : null;
+}
+// random label whose current phase has this style, weighted by takes left, never the same twice in a row
+function pickLabel(counts: Record<string, number>, style: Style, not: string[]): string | null {
+  const c = RECORD_ORDER.filter((l) => (counts[l] ?? 0) < targetOf(l) && same(phaseAt(l, counts[l] ?? 0), style));
+  const pool = c.filter((l) => !not.includes(l)).length ? c.filter((l) => !not.includes(l)) : c;
+  const w = pool.map((l) => phaseLeft(l, counts[l] ?? 0));
+  let r = Math.random() * w.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < pool.length; i++) if ((r -= w[i]) < 0) return pool[i];
+  return pool[0] ?? null;
+}
+
+function phaseAt(l: string, count: number) {
+  let start = 0;
+  for (const [k, chain, fast] of PHASES(l)) {
+    if (count < start + k) return { start, chain, fast };
+    start += k;
+  }
+  return { start, chain: false, fast: false };
+}
 const REFS: Record<string, { video: string; word: string; credit: string; license: string }> = refs;
 
 function beep(times = 1, freq = 880) {
@@ -43,6 +117,19 @@ export default function RecordPage() {
   const [hasModel, setHasModel] = useState(false);
   const [history, setHistory] = useState<Token[]>([]);
   const [status, setStatus] = useState<SignStatus>({ state: "rest", fps: 0, online: false });
+  const [takeMs, setTakeMs] = useState(0);
+  const [random, setRandom] = useState(true);
+  const randomRef = useRef(true);
+  const [upNext, setUpNext] = useState<string | null>(null);
+  const [blockStyle, setBlockStyle] = useState<Style | null>(null);
+  const prompt = useRef<{ style: Style | null; left: number; next: string | null }>({ style: null, left: 0, next: null });
+  const [chainOverride, setChainOverride] = useState<{ label: string; on: boolean } | null>(null);
+  const signStart = useRef(0);
+  const onStatus = useCallback((s: SignStatus) => {
+    if (s.state === "signing" && !signStart.current) signStart.current = Date.now();
+    if (s.state === "rest") setTimeout(() => (signStart.current = 0), 300);
+    setStatus(s);
+  }, []);
   const [token, setToken] = useState<Token | null>(null);
   const [flash, setFlash] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -75,19 +162,84 @@ export default function RecordPage() {
     };
   }, [refreshCounts]);
 
+  const startBlock = useCallback((counts: Record<string, number>, after: string[]) => {
+    const style = pickStyle(counts);
+    if (!style) {
+      say("All recordings done. Tell the agent.");
+      return null;
+    }
+    const first = pickLabel(counts, style, after);
+    const prev = prompt.current.style;
+    prompt.current = { style, left: BLOCK, next: first && pickLabel(counts, style, [first]) };
+    setUpNext(prompt.current.next);
+    setBlockStyle(style);
+    if (!prev || !same(prev, style)) say(`Random signs, ${phaseName(style)}`);
+    return first;
+  }, []);
+
+  useEffect(() => {
+    if (mode !== "record") return;
+    if (randomRef.current) {
+      if (!prompt.current.style) {
+        const first = startBlock(countsRef.current, []);
+        if (first) setTimeout(() => setLabel(first), 0);
+      }
+      return;
+    }
+    const n = countsRef.current[label] ?? 0;
+    if (n < targetOf(label)) say(`${label}. ${phaseName(phaseAt(label, n))}, ${phaseLeft(label, n)} times`);
+  }, [mode, label, startBlock]);
+
   const onRecorded = useCallback((lab: string, count: number) => {
+    if (signStart.current) setTakeMs(Date.now() - signStart.current - 150);
     const next = { ...countsRef.current, [lab]: count };
     setCounts(next);
     setFlash(true);
     setTimeout(() => setFlash(false), 300);
     const todo = RECORD_ORDER.find((l) => (next[l] ?? 0) < targetOf(l));
+    const base = BASE_S[lab] * (phaseAt(lab, count - 1).fast ? 0.65 : 1);
+    const ms = signStart.current ? Date.now() - signStart.current - 150 : 0;
+    if (base && ms && (ms > base * 1900 || ms < base * 450)) say(ms > base * 1900 ? "too long, two signs? undo" : "too short, undo?");
+    if (randomRef.current) {
+      const pr = prompt.current;
+      pr.left -= 1;
+      const ok = (l: string | null) => l && pr.style && (next[l] ?? 0) < targetOf(l) && same(phaseAt(l, next[l] ?? 0), pr.style);
+      let cur = ok(pr.next) && pr.left > 0 ? pr.next : null;
+      if (!cur && pr.left > 0 && pr.style) cur = pickLabel(next, pr.style, [lab]);
+      if (!cur) {
+        const prev = pr.style;
+        cur = startBlock(next, [lab]);
+        if (!cur) return beep(2, 1320);
+        const now = prompt.current.style;
+        if (prev && now && !same(prev, now)) {
+          beep(3, 660);
+          setPaused(true);
+          setTimeout(() => setPaused(false), PAUSE_MS);
+        } else beep();
+      } else {
+        pr.next = pickLabel(next, pr.style!, [cur]);
+        setUpNext(pr.next);
+        beep();
+      }
+      setLabel(cur);
+      return;
+    }
+    if (lab === labelRef.current && count < targetOf(lab) && phaseAt(lab, count).start === count) {
+      // new phase: short pause in saving so there is time to change the way of signing
+      beep(3, 660);
+      say(`Now ${phaseName(phaseAt(lab, count))}, ${phaseLeft(lab, count)} times`);
+      setPaused(true);
+      setTimeout(() => setPaused(false), PAUSE_MS);
+      return;
+    }
+    if (!todo && count >= targetOf(lab)) say("All recordings done. Tell the agent.");
     if (lab !== labelRef.current || count < targetOf(lab) || !todo) return beep();
     // target reached: pause saving, switch to the next unfinished label, then resume
     beep(2, 1320);
     setPaused(true);
     setLabel(todo);
     setTimeout(() => setPaused(false), PAUSE_MS);
-  }, []);
+  }, [startBlock]);
 
   const endSentence = useCallback(() => {
     clearTimeout(sentenceTimer.current);
@@ -134,16 +286,34 @@ export default function RecordPage() {
     }
   };
 
-  const undo = async () => {
+  const undo = useCallback(async () => {
     const res = await fetch(`${SERVICE_URL}/undo`, { method: "POST" }).catch(() => null);
     if (res?.ok) {
       const { label: lab, count } = await res.json();
       setCounts((c) => ({ ...c, [lab]: count }));
-    }
-  };
+      if (lab !== labelRef.current) setLabel(lab); // undo right after an auto-advance goes back to that label
+      beep(1, 330);
+    } else say("nothing to undo");
+  }, []);
+
+  useEffect(() => {
+    if (mode !== "record") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (e.key === "Backspace" || e.key === "u") {
+        e.preventDefault();
+        void undo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode, undo]);
 
   const nextLabel = () => setLabel(RECORD_ORDER[(RECORD_ORDER.indexOf(label) + 1) % RECORD_ORDER.length]);
   const current = counts[label] ?? 0;
+  const phase = phaseAt(label, current);
+  const style = random && blockStyle ? blockStyle : phase;
+  const chain = chainOverride?.label === label ? chainOverride.on : style.chain;
   const btn = "rounded-lg px-3 py-2 font-medium";
 
   return (
@@ -152,8 +322,9 @@ export default function RecordPage() {
         mode={paused ? "infer" : mode}
         recordLabel={label}
         signer={signer}
+        chain={chain}
         onToken={onToken}
-        onStatus={setStatus}
+        onStatus={onStatus}
         onRecorded={onRecorded}
       />
 
@@ -170,6 +341,12 @@ export default function RecordPage() {
           ))}
         </div>
 
+        {mode === "record" && (
+          <button onClick={undo} className={`${btn} bg-amber-400 py-4 text-2xl font-bold text-zinc-900 hover:bg-amber-300`}>
+            ↶ UNDO LAST TAKE <span className="text-base font-medium">(Backspace or U)</span>
+          </button>
+        )}
+
         <p className="text-sm text-zinc-600">
           service: {status.online ? `online · ${status.fps} fps · ${status.state}` : "offline"} · model:{" "}
           {hasModel ? "loaded" : "not trained yet"}
@@ -181,10 +358,33 @@ export default function RecordPage() {
               signer
               <input value={signer} onChange={(e) => setSigner(e.target.value)} className="rounded border bg-white px-2 py-1 text-zinc-900" />
             </label>
+            <label className="flex items-center gap-2 rounded bg-sky-100 p-2 text-sm font-semibold text-zinc-900">
+              <input
+                type="checkbox"
+                checked={random}
+                onChange={(e) => {
+                  randomRef.current = e.target.checked;
+                  setRandom(e.target.checked);
+                  prompt.current.style = null;
+                  if (e.target.checked) {
+                    const first = startBlock(countsRef.current, []);
+                    if (first) setLabel(first);
+                  }
+                }}
+              />
+              random signs (the page picks the next sign after every take)
+            </label>
+            <label className={`flex items-center gap-2 rounded p-2 text-sm text-zinc-900 ${chain ? "bg-violet-300 font-semibold" : "bg-zinc-200 font-semibold"}`}>
+              <input type="checkbox" checked={chain} onChange={(e) => setChainOverride({ label, on: e.target.checked })} />
+              {style.fast && <b className="text-red-700">FAST · </b>}
+              {chain
+                ? "CONTINUOUS: hands stay up, ½ s stop in the air = one sample (stop before lowering)"
+                : "LOWERED: hands down between takes"}
+            </label>
             <label className="flex flex-col gap-1 text-sm">
               label
               <select value={label} onChange={(e) => setLabel(e.target.value)} className="rounded border bg-white px-2 py-1 text-lg text-zinc-900">
-                {Object.entries({ p0: labels.p0, none: [labels.none] }).map(([group, list]) => (
+                {Object.entries({ p0: labels.p0, extra: EXTRA, none: [labels.none] }).map(([group, list]) => (
                   <optgroup key={group} label={group}>
                     {list.map((l) => (
                       <option key={l} value={l}>
@@ -198,11 +398,25 @@ export default function RecordPage() {
             <div
               className={`rounded-xl p-4 text-center transition-colors ${paused ? "bg-sky-200" : flash ? "bg-green-300" : current >= targetOf(label) ? "bg-green-100" : "bg-zinc-100"}`}
             >
-              {paused && <div className="text-sm font-semibold text-sky-800">next sign: get ready…</div>}
-              <div className="text-2xl font-semibold">{label}</div>
+              {paused && <div className="text-sm font-semibold text-sky-800">get ready…</div>}
+              {current < targetOf(label) ? (
+                <div className={`rounded-lg px-2 py-1 text-xl font-bold text-white ${style.fast ? "bg-red-600" : chain ? "bg-violet-600" : "bg-zinc-700"}`}>
+                  {phaseName(style).toUpperCase()}{random ? "" : ` · ${phaseLeft(label, current)} left`}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-green-600 px-2 py-1 text-xl font-bold text-white">DONE</div>
+              )}
+              <div className={random ? "text-6xl font-black tracking-wide" : "text-2xl font-semibold"}>{label}</div>
+              {random && upNext && <div className="text-lg text-zinc-600">next: <b>{upNext}</b></div>}
               <div className="text-7xl font-bold tabular-nums">{current}</div>
               <div className="text-sm text-zinc-600">target {targetOf(label)}</div>
+              {takeMs > 0 && (
+                <div className="text-sm text-zinc-700">
+                  last take {(takeMs / 1000).toFixed(2)} s{BASE_S[label] && ` · normal ≈ ${BASE_S[label]} s, fast ≈ ${(BASE_S[label] * 0.65).toFixed(1)} s`}
+                </div>
+              )}
             </div>
+            {HINTS[label] && <p className="rounded-lg bg-amber-100 p-3 text-lg text-zinc-900">{HINTS[label]}</p>}
             {REFS[label] && (
               <figure className="flex flex-col gap-1">
                 <video key={label} src={REFS[label].video} autoPlay loop muted playsInline className="w-full rounded-lg bg-black" />

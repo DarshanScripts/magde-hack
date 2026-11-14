@@ -24,6 +24,10 @@ PRE_ROLL = 6
 POST_ROLL = 2
 MIN_SEGMENT_MS = 200
 MAX_SEGMENT_MS = 3000
+SPLIT_SPEED = 0.7      # median speed of the last SPLIT_WINDOW frames below this = pause candidate
+SPLIT_WINDOW = 5
+SPLIT_MIN_MS = 500     # a split-off sign must be at least this long (inference, classifier-gated)
+CHAIN_MIN_MS = 550     # record mode, no classifier gate
 EURO_MIN_CUTOFF = 1.0
 EURO_BETA = 3.0
 EURO_D_CUTOFF = 1.0
@@ -121,6 +125,7 @@ class Segmenter:
         self.still_since = None
         self.drop_since = None
         self.speed = 0.0
+        self.recent = deque(maxlen=SPLIT_WINDOW)
 
     def measure(self, frame):
         """Returns (any hand in signing space, max speed of those hands, any hand just entered)."""
@@ -166,6 +171,7 @@ class Segmenter:
             return None
 
         self.seg.append(frame)
+        self.recent.append(speed if active else 0.0)
         moving = active and (speed >= END_SPEED or entered)
         if moving:
             self.last_active = len(self.seg) - 1
@@ -182,6 +188,22 @@ class Segmenter:
         active_ms = self.seg[self.last_active]["t"] - self.t_start
         self.state, self.seg, self.hot = "rest", [], 0
         return seg if active_ms >= MIN_SEGMENT_MS else None
+
+
+    def pause_candidate(self, min_ms=SPLIT_MIN_MS, speed=SPLIT_SPEED):
+        """While signing with hands up: hands slowed down after at least min_ms of signing."""
+        return (self.state == "signing" and len(self.recent) == SPLIT_WINDOW
+                and float(np.median(self.recent)) < speed
+                and self.seg[-1]["t"] - self.t_start >= min_ms)
+
+    def cut(self):
+        """Ends the current sign here (it was classified) and starts the next one, still signing."""
+        seg, self.seg = self.seg, self.seg[-2:]
+        self.t_start = self.seg[0]["t"]
+        self.last_active = len(self.seg) - 1
+        self.recent.clear()
+        self.still_since = self.drop_since = None
+        return seg
 
 
 def replay(path):
@@ -214,7 +236,7 @@ MOUTH_KEYS = (
 SEQ_LEN = 32
 HAND_DIM = 63 + 4 + 2 + 1
 FEAT_DIM = 2 * HAND_DIM + len(MOUTH_KEYS) + 1
-MAX_GAP = 3
+MAX_GAP = 5
 NOSE = 0
 
 
@@ -293,16 +315,21 @@ def augment(p, rng):
     T = len(p["t"])
     if T > 8:
         a, b = rng.integers(0, 3), T - rng.integers(0, 3)
+        if rng.random() < 0.4:  # continuous signing: no rise from rest / no lowering
+            a, b = rng.integers(0, max(1, T // 4)), T - rng.integers(0, max(1, T // 6))
         p = {k: v[a:b] for k, v in p.items()}
+    if len(p["t"]) > 10 and rng.random() < 0.3:  # fast signing: half the frames
+        o = rng.integers(0, 2)
+        p = {k: v[o::2] for k, v in p.items()}
     t = p["t"]
     span = max(t[-1] - t[0], 1.0)
     p["t"] = t + rng.uniform(-0.1, 0.1) * span * np.sin(np.pi * (t - t[0]) / span)
 
     mid = (p["pose"][:, L_SHOULDER] + p["pose"][:, R_SHOULDER]) / 2
     sw = np.linalg.norm(p["pose"][:, L_SHOULDER] - p["pose"][:, R_SHOULDER], axis=1)
-    ang, sc = np.deg2rad(rng.uniform(-10, 10)), rng.uniform(0.9, 1.1)
+    ang, sc = np.deg2rad(rng.uniform(-12, 12)), rng.uniform(0.85, 1.15)
     R = sc * np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]])
-    shift = rng.uniform(-0.05, 0.05, 2)
+    shift = rng.uniform(-0.1, 0.1, 2)
     xy = p["hands"][..., :2] - mid[:, None, None]
     p["hands"][..., :2] = xy @ R.T + mid[:, None, None] + shift * sw[:, None, None, None]
     p["hands"][..., :2] += rng.normal(0, 0.01, p["hands"][..., :2].shape) * sw[:, None, None, None]
