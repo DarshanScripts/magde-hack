@@ -16,6 +16,8 @@ P0, P1, NONE = load_labels()
 LABELS = [*P0, *P1, NONE]
 LOCAL_ORIGIN = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 REPEAT_MS = 400
+# Integration testing without a trained model: each detected sign emits the next gloss of this list.
+FAKE = [g for g in os.environ.get("SIGN_FAKE", "").split(",") if g]
 model: Recognizer | None = None
 
 app = FastAPI()
@@ -61,7 +63,7 @@ def save(label: str, signer: str, seg: list[dict]) -> Path:
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": model is not None, "labels": LABELS, "counts": {lab: count(lab) for lab in LABELS}}
+    return {"ok": True, "model": model is not None, "fake": bool(FAKE), "labels": LABELS, "counts": {lab: count(lab) for lab in LABELS}}
 
 
 @app.post("/undo")
@@ -86,6 +88,7 @@ async def ws_endpoint(ws: WebSocket):
     seg = Segmenter()
     nm = NonManual()
     last_token = ("", 0)
+    fake_i = 0
     mode, label, signer = "infer", None, None
     times: deque[float] = deque()
     last_state, last_status = None, 0.0
@@ -116,11 +119,15 @@ async def ws_endpoint(ws: WebSocket):
                 if done and mode == "record":
                     save(label, signer, done)
                     await ws.send_json({"type": "recorded", "label": label, "count": count(label)})
-                elif done and rec is None:
+                elif done and rec is None and not FAKE:
                     await error("model not loaded")
                 elif done:
-                    w_h = {"w": done[0]["w"], "h": done[0]["h"]}
-                    lab, conf, top = rec.predict({**w_h, "frames": done})
+                    if rec is None:
+                        lab, conf, top = FAKE[fake_i % len(FAKE)], 1.0, []
+                        fake_i += 1
+                    else:
+                        w_h = {"w": done[0]["w"], "h": done[0]["h"]}
+                        lab, conf, top = rec.predict({**w_h, "frames": done})
                     question, negation = nm.analyse(done)
                     t_end = done[-1]["t"]
                     if lab != last_token[0] or t_end - last_token[1] > REPEAT_MS:
