@@ -45,7 +45,12 @@ Meanwhile the user learns the 15 p0 signs (one variant each, from DW-DGS or Spre
 ## Environment facts
 - Repo: `/home/adityaladawa/Desktop/mghack`, remote `https://github.com/DarshanScripts/magde-hack.git`.
 - `.env` at repo root (gitignored), symlinked as `web/.env`. Keys: `ELEVEN_LABS_API_KEY`, `ELEVEN_LABS_VOICE_ID`, `OPENROUTER_API_KEY`, `LLM_MODEL=google/gemma-4-31b-it`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `NGROK_AUTH_TOKEN`. Never print or commit values; pass `ELEVEN_LABS_API_KEY` explicitly (SDK default name differs).
-- GPU: GTX 1050 (sm_61). torch 2.14.1+cu126 verified running CUDA conv on it.
+- GPU: GTX 1050 Mobile (sm_61, driver supports CUDA ≤ 12.6) + Intel UHD 630 (Optimus), KDE Wayland. torch 2.14.1+cu126 verified running CUDA conv on it. CUDA only matters for Python training; browser MediaPipe runs on WebGL in Chrome's GPU process.
+- Chrome defaults to the Intel iGPU. To run MediaPipe on the GTX 1050, launch a separate Chrome via PRIME offload under XWayland (Wayland + NVIDIA offload crashes Chrome's GPU process):
+  `prime-run google-chrome-stable --ozone-platform=x11 --user-data-dir=/tmp/chrome-nvidia http://localhost:3000/record`
+  Verify with `chrome://gpu` (GL_RENDERER = NVIDIA) or `/proc/<gpu-process pid>/fd` → `/dev/nvidia0`. `nvidia-smi` does not list Chrome (sandbox PID namespace).
+- Webcam (`/dev/video0`): 1280×720 is 30 fps only as MJPG, 10 fps as YUYV; 640×480 is 30 fps in both. `SignCamera` requests 640×480 (MediaPipe downsizes internally anyway).
+- When killing processes by pattern, use a bracket pattern (`pkill -f "[/]opt/google/..."`) or the shell kills itself.
 - ngrok 3.39.13 in `~/.local/bin`, authtoken configured. One session per token.
 - Node 26, npm 11, `uv` available.
 
