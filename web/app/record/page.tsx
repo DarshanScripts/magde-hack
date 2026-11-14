@@ -8,10 +8,9 @@ import { SIGN_WS_URL, type SignStatus, type Token } from "@/lib/contract";
 
 const SignCamera = dynamic(() => import("@/components/SignCamera"), { ssr: false });
 const SERVICE_URL = SIGN_WS_URL.replace(/^ws/, "http").replace(/\/ws$/, "");
-const ALL_LABELS = [...labels.p0, ...labels.p1, labels.none];
 const TARGET = 15;
 const NONE_TARGET = 30;
-const RECORD_ORDER = [...labels.p0, labels.none];
+const RECORD_ORDER = [...labels.p0, labels.none]; // p1 (numbers, extras) not recorded for now
 const PAUSE_MS = 2500;
 const targetOf = (l: string) => (l === labels.none ? NONE_TARGET : TARGET);
 const REFS: Record<string, { video: string; word: string; credit: string; license: string }> = refs;
@@ -97,7 +96,7 @@ export default function RecordPage() {
     }
   };
 
-  const nextLabel = () => setLabel(ALL_LABELS[(ALL_LABELS.indexOf(label) + 1) % ALL_LABELS.length]);
+  const nextLabel = () => setLabel(RECORD_ORDER[(RECORD_ORDER.indexOf(label) + 1) % RECORD_ORDER.length]);
   const current = counts[label] ?? 0;
   const btn = "rounded-lg px-3 py-2 font-medium";
 
@@ -142,7 +141,7 @@ export default function RecordPage() {
             <label className="flex flex-col gap-1 text-sm">
               label
               <select value={label} onChange={(e) => setLabel(e.target.value)} className="rounded border px-2 py-1 text-lg">
-                {Object.entries({ p0: labels.p0, p1: labels.p1, none: [labels.none] }).map(([group, list]) => (
+                {Object.entries({ p0: labels.p0, none: [labels.none] }).map(([group, list]) => (
                   <optgroup key={group} label={group}>
                     {list.map((l) => (
                       <option key={l} value={l}>
@@ -208,7 +207,7 @@ export default function RecordPage() {
         )}
 
         <div className="max-h-80 overflow-auto rounded-xl border p-3 font-mono text-sm">
-          {ALL_LABELS.map((l) => (
+          {RECORD_ORDER.map((l) => (
             <div key={l} className={`flex justify-between ${l === label ? "font-bold" : ""}`}>
               <span>{l}</span>
               <span className={(counts[l] ?? 0) >= targetOf(l) ? "text-green-700" : ""}>{counts[l] ?? 0}</span>
