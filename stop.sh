@@ -4,11 +4,11 @@ cd "$(dirname "$0")"
 
 case "$OSTYPE" in
 msys* | cygwin*)
-  # Kill this repo's sign service and dev server by command line, and ngrok, with their child processes.
+  # Kill this repo's sign service (not this PowerShell, whose own command line matches too) and dev server by command line, and ngrok, with their child processes.
   powershell.exe -NoProfile -Command "
     \$repo = '$(cygpath -w "$PWD")'.ToLower()
     function Stop-Matching(\$name, \$test) {
-      \$found = @(Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -and (& \$test \$_.CommandLine.ToLower()) })
+      \$found = @(Get-CimInstance Win32_Process | Where-Object { \$_.ProcessId -ne \$PID -and \$_.Name -notmatch '^(powershell|pwsh|bash)\.exe\$' -and \$_.CommandLine -and (& \$test \$_.CommandLine.ToLower()) })
       foreach (\$p in \$found) { taskkill /PID \$p.ProcessId /T /F *> \$null }
       if (\$found.Count) { \"\$name stopped\" } else { \"\$name was not running\" }
     }
